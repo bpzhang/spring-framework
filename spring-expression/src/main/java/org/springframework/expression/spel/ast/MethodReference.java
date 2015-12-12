@@ -292,8 +292,16 @@ public class MethodReference extends SpelNodeImpl {
 		boolean isStaticMethod = Modifier.isStatic(method.getModifiers());
 		String descriptor = cf.lastDescriptor();
 
-		if (descriptor == null && !isStaticMethod) {
-			cf.loadTarget(mv);
+		if (descriptor == null) {
+			if (!isStaticMethod) {
+				// Nothing on the stack but something is needed
+				cf.loadTarget(mv);
+			}
+		} else {
+			if (isStaticMethod) {
+				// Something on the stack when nothing is needed
+				mv.visitInsn(POP);
+			}
 		}
 		
 		if (CodeFlow.isPrimitive(descriptor)) {
@@ -376,7 +384,7 @@ public class MethodReference extends SpelNodeImpl {
 		}
 
 		public boolean isSuitable(Object value, TypeDescriptor target, List<TypeDescriptor> argumentTypes) {
-			return ((this.staticClass == null || this.staticClass.equals(value)) &&
+			return ((this.staticClass == null || this.staticClass == value) &&
 					this.target.equals(target) && this.argumentTypes.equals(argumentTypes));
 		}
 
