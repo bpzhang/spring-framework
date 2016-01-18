@@ -14,30 +14,19 @@
  * limitations under the License.
  */
 
-package org.springframework.tests;
+package org.springframework.transaction.config;
 
-import org.junit.Test;
-
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import org.springframework.tests.transaction.CallCountingTransactionManager;
 
 /**
- * Tests for {@link JavaVersion}.
- *
- * @author Phillip Webb
+ * @author Juergen Hoeller
  */
-public class JavaVersionTests {
+@NoSynch
+@SuppressWarnings("serial")
+public class NoSynchTransactionManager extends CallCountingTransactionManager {
 
-	@Test
-	public void runningVersion() {
-		assertNotNull(JavaVersion.runningVersion());
-		assertThat(System.getProperty("java.version"), startsWith(JavaVersion.runningVersion().toString()));
-	}
-
-	@Test
-	public void isAtLeast() throws Exception {
-		assertTrue(JavaVersion.JAVA_16.isAtLeast(JavaVersion.JAVA_16));
-		assertFalse(JavaVersion.JAVA_16.isAtLeast(JavaVersion.JAVA_17));
+	public NoSynchTransactionManager() {
+		setTransactionSynchronization(CallCountingTransactionManager.SYNCHRONIZATION_NEVER);
 	}
 
 }

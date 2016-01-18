@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2013 the original author or authors.
+ * Copyright 2002-2015 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,23 +14,16 @@
  * limitations under the License.
  */
 
-package org.springframework.tests;
+package org.springframework.transaction.config;
 
-import org.junit.Test;
-
-import static org.hamcrest.Matchers.*;
-import static org.junit.Assert.*;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.tests.transaction.CallCountingTransactionManager;
 
 /**
- * General build related tests. Part of spring-core to ensure that they run early in the
- * build process.
+ * @author Juergen Hoeller
  */
-public class BuildTests {
-
-	@Test
-	public void javaVersion() throws Exception {
-		Assume.group(TestGroup.CI);
-		assertThat("Java Version", JavaVersion.runningVersion(), equalTo(JavaVersion.JAVA_18));
-	}
+@Qualifier("synch")
+@SuppressWarnings("serial")
+public class SynchTransactionManager extends CallCountingTransactionManager {
 
 }

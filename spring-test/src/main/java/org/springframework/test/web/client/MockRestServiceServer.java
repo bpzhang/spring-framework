@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -79,6 +79,12 @@ import org.springframework.web.client.support.RestGatewaySupport;
  * <p>Note that because of the fluent API offered by this class (and related
  * classes), you can typically use the Code Completion features (i.e.
  * ctrl-space) in your IDE to set up the mocks.
+ *
+ * <p>An alternative to the above is to use
+ * {@link MockMvcClientHttpRequestFactory} which allows executing requests
+ * against a {@link org.springframework.test.web.servlet.MockMvc MockMvc}
+ * instance. That allows you to process requests using your server-side code
+ * but without running a server.
  *
  * <p><strong>Credits:</strong> The client-side REST testing support was
  * inspired by and initially based on similar code in the Spring WS project for
