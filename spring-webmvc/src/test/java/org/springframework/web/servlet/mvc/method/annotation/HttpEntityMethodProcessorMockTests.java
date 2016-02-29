@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2015 the original author or authors.
+ * Copyright 2002-2016 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -175,7 +175,8 @@ public class HttpEntityMethodProcessorMockTests {
 		assertFalse("The requestHandled flag shouldn't change", mavContainer.isRequestHandled());
 		RequestEntity<?> requestEntity = (RequestEntity<?>) result;
 		assertEquals("Invalid method", HttpMethod.GET, requestEntity.getMethod());
-		assertEquals("Invalid url", new URI("http", null, "www.example.com", 80, "/path", null, null), requestEntity.getUrl());
+		// using default port (which is 80), so do not need to append the port (-1 means ignore)
+		assertEquals("Invalid url", new URI("http", null, "www.example.com", -1, "/path", null, null), requestEntity.getUrl());
 		assertEquals("Invalid argument", body, requestEntity.getBody());
 	}
 

@@ -37,6 +37,7 @@ import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpRange;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.ServletServerHttpRequest;
@@ -111,7 +112,7 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 
 
 	public ResourceHttpRequestHandler() {
-		super(METHOD_GET, METHOD_HEAD);
+		super(HttpMethod.GET.name(), HttpMethod.HEAD.name());
 		this.resourceResolvers.add(new PathResourceResolver());
 	}
 
@@ -225,16 +226,21 @@ public class ResourceHttpRequestHandler extends WebContentGenerator
 	public void handleRequest(HttpServletRequest request, HttpServletResponse response)
 			throws ServletException, IOException {
 
-		// Supported methods and required session
-		checkRequest(request);
-
-		// Check whether a matching resource exists
+		// For very general mappings (e.g. "/") we need to check 404 first
 		Resource resource = getResource(request);
 		if (resource == null) {
 			logger.trace("No matching resource found - returning 404");
 			response.sendError(HttpServletResponse.SC_NOT_FOUND);
 			return;
 		}
+
+		if (HttpMethod.OPTIONS.matches(request.getMethod())) {
+			response.setHeader("Allow", getAllowHeader());
+			return;
+		}
+
+		// Supported methods and required session
+		checkRequest(request);
 
 		// Header phase
 		if (new ServletWebRequest(request, response).checkNotModified(resource.lastModified())) {
