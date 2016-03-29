@@ -19,6 +19,7 @@ package org.springframework.jmx.export.annotation;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Array;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.Collection;
 import java.util.Set;
 
@@ -28,6 +29,7 @@ import org.springframework.beans.factory.BeanFactory;
 import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.beans.factory.config.EmbeddedValueResolver;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.jmx.export.metadata.InvalidMetadataException;
 import org.springframework.jmx.export.metadata.JmxAttributeSource;
@@ -40,6 +42,7 @@ import org.springframework.util.StringValueResolver;
  * @author Rob Harrop
  * @author Juergen Hoeller
  * @author Jennifer Hickey
+ * @author Stephane Nicoll
  * @since 1.2
  * @see ManagedResource
  * @see ManagedAttribute
@@ -63,6 +66,11 @@ public class AnnotationJmxAttributeSource implements JmxAttributeSource, BeanFac
 		ManagedResource ann = AnnotationUtils.findAnnotation(beanClass, ManagedResource.class);
 		if (ann == null) {
 			return null;
+		}
+		Class<?> declaringClass = AnnotationUtils.findAnnotationDeclaringClass(ManagedResource.class, beanClass);
+		Class<?> target = (declaringClass != null && !declaringClass.isInterface() ? declaringClass : beanClass);
+		if (!Modifier.isPublic(target.getModifiers())) {
+			throw new InvalidMetadataException("@ManagedResource class '" + target.getName() + "' must be public");
 		}
 		org.springframework.jmx.export.metadata.ManagedResource managedResource = new org.springframework.jmx.export.metadata.ManagedResource();
 		AnnotationBeanUtils.copyPropertiesToBean(ann, managedResource, this.embeddedValueResolver);
@@ -99,7 +107,7 @@ public class AnnotationJmxAttributeSource implements JmxAttributeSource, BeanFac
 	public org.springframework.jmx.export.metadata.ManagedOperationParameter[] getManagedOperationParameters(Method method)
 			throws InvalidMetadataException {
 
-		Set<ManagedOperationParameter> anns = AnnotationUtils.getRepeatableAnnotations(
+		Set<ManagedOperationParameter> anns = AnnotatedElementUtils.getMergedRepeatableAnnotations(
 				method, ManagedOperationParameter.class, ManagedOperationParameters.class);
 		return copyPropertiesToBeanArray(anns, org.springframework.jmx.export.metadata.ManagedOperationParameter.class);
 	}
@@ -108,7 +116,7 @@ public class AnnotationJmxAttributeSource implements JmxAttributeSource, BeanFac
 	public org.springframework.jmx.export.metadata.ManagedNotification[] getManagedNotifications(Class<?> clazz)
 			throws InvalidMetadataException {
 
-		Set<ManagedNotification> anns = AnnotationUtils.getRepeatableAnnotations(
+		Set<ManagedNotification> anns = AnnotatedElementUtils.getMergedRepeatableAnnotations(
 				clazz, ManagedNotification.class, ManagedNotifications.class);
 		return copyPropertiesToBeanArray(anns, org.springframework.jmx.export.metadata.ManagedNotification.class);
 	}

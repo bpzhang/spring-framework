@@ -406,13 +406,11 @@ public abstract class CacheAspectSupport extends AbstractCacheInvoker
 				}
 			}
 			catch (VariableNotAvailableException e) {
-				// Ignoring failure due to missing result, consider the cache put has
-				// to proceed
+				// Ignoring failure due to missing result, consider the cache put has to proceed
 			}
 		}
-		// check if  all puts have been excluded by condition
-		return cachePutContexts.size() != excluded.size();
-
+		// Check if all puts have been excluded by condition
+		return (cachePutContexts.size() != excluded.size());
 	}
 
 	private void processCacheEvicts(Collection<CacheOperationContext> contexts, boolean beforeInvocation, Object result) {
@@ -748,7 +746,7 @@ public abstract class CacheAspectSupport extends AbstractCacheInvoker
 	}
 
 
-	private static class CacheOperationCacheKey {
+	private static final class CacheOperationCacheKey implements Comparable<CacheOperationCacheKey> {
 
 		private final CacheOperation cacheOperation;
 
@@ -776,5 +774,20 @@ public abstract class CacheAspectSupport extends AbstractCacheInvoker
 		public int hashCode() {
 			return (this.cacheOperation.hashCode() * 31 + this.methodCacheKey.hashCode());
 		}
+
+		@Override
+		public String toString() {
+			return this.cacheOperation + " on " + this.methodCacheKey;
+		}
+
+		@Override
+		public int compareTo(CacheOperationCacheKey other) {
+			int result = this.cacheOperation.getName().compareTo(other.cacheOperation.getName());
+			if (result == 0) {
+				result = this.methodCacheKey.compareTo(other.methodCacheKey);
+			}
+			return result;
+		}
 	}
+
 }

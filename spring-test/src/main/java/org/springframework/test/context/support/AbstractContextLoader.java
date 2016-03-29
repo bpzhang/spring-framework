@@ -33,6 +33,7 @@ import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.core.env.PropertySource;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.test.context.ContextConfigurationAttributes;
+import org.springframework.test.context.ContextCustomizer;
 import org.springframework.test.context.ContextLoader;
 import org.springframework.test.context.MergedContextConfiguration;
 import org.springframework.test.context.SmartContextLoader;
@@ -56,10 +57,13 @@ import org.springframework.util.ResourceUtils;
  *
  * @author Sam Brannen
  * @author Juergen Hoeller
+ * @author Phillip Webb
  * @since 2.5
  * @see #generateDefaultLocations
  * @see #getResourceSuffixes
  * @see #modifyLocations
+ * @see #prepareContext
+ * @see #customizeContext
  */
 public abstract class AbstractContextLoader implements SmartContextLoader {
 
@@ -110,12 +114,13 @@ public abstract class AbstractContextLoader implements SmartContextLoader {
 	 * <li>Determines what (if any) context initializer classes have been supplied
 	 * via the {@code MergedContextConfiguration} and instantiates and
 	 * {@linkplain ApplicationContextInitializer#initialize invokes} each with the
-	 * given application context.</li>
+	 * given application context.
 	 * <ul>
 	 * <li>Any {@code ApplicationContextInitializers} implementing
 	 * {@link org.springframework.core.Ordered Ordered} or annotated with {@link
 	 * org.springframework.core.annotation.Order @Order} will be sorted appropriately.</li>
 	 * </ul>
+	 * </li>
 	 * </ul>
 	 * @param context the newly created application context
 	 * @param mergedConfig the merged context configuration
@@ -163,6 +168,23 @@ public abstract class AbstractContextLoader implements SmartContextLoader {
 		AnnotationAwareOrderComparator.sort(initializerInstances);
 		for (ApplicationContextInitializer<ConfigurableApplicationContext> initializer : initializerInstances) {
 			initializer.initialize(context);
+		}
+	}
+
+	/**
+	 * Customize the {@link ConfigurableApplicationContext} created by this
+	 * {@code ContextLoader} <em>after</em> bean definitions have been loaded
+	 * into the context but <em>before</em> the context has been refreshed.
+	 * <p>The default implementation delegates to all
+	 * {@link MergedContextConfiguration#getContextCustomizers context customizers}
+	 * that have been registered with the supplied {@code mergedConfig}.
+	 * @param context the newly created application context
+	 * @param mergedConfig the merged context configuration
+	 * @since 4.3
+	 */
+	protected void customizeContext(ConfigurableApplicationContext context, MergedContextConfiguration mergedConfig) {
+		for (ContextCustomizer contextCustomizer : mergedConfig.getContextCustomizers()) {
+			contextCustomizer.customizeContext(context, mergedConfig);
 		}
 	}
 

@@ -17,12 +17,8 @@
 package org.springframework.web.servlet.resource;
 
 import static org.junit.Assert.*;
-import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.*;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -42,11 +38,14 @@ import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.test.MockHttpServletRequest;
 import org.springframework.mock.web.test.MockHttpServletResponse;
 import org.springframework.mock.web.test.MockServletContext;
 import org.springframework.util.StringUtils;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.accept.ContentNegotiationManager;
+import org.springframework.web.accept.ContentNegotiationManagerFactoryBean;
 import org.springframework.web.servlet.HandlerMapping;
 
 /**
@@ -55,6 +54,7 @@ import org.springframework.web.servlet.HandlerMapping;
  * @author Keith Donald
  * @author Jeremy Grelle
  * @author Rossen Stoyanchev
+ * @author Brian Clozel
  */
 public class ResourceHttpRequestHandlerTests {
 
@@ -223,6 +223,47 @@ public class ResourceHttpRequestHandlerTests {
 
 		assertEquals("text/javascript", this.response.getContentType());
 		assertEquals("function foo() { console.log(\"hello world\"); }", this.response.getContentAsString());
+	}
+
+	@Test // SPR-13658
+	public void getResourceWithRegisteredMediaType() throws Exception {
+		ContentNegotiationManagerFactoryBean factory = new ContentNegotiationManagerFactoryBean();
+		factory.addMediaType("css", new MediaType("foo", "bar"));
+		factory.afterPropertiesSet();
+		ContentNegotiationManager manager = factory.getObject();
+
+		List<Resource> paths = Collections.singletonList(new ClassPathResource("test/", getClass()));
+		this.handler = new ResourceHttpRequestHandler();
+		this.handler.setLocations(paths);
+		this.handler.setContentNegotiationManager(manager);
+		this.handler.afterPropertiesSet();
+
+		this.request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "foo.css");
+		this.handler.handleRequest(this.request, this.response);
+
+		assertEquals("foo/bar", this.response.getContentType());
+		assertEquals("h1 { color:red; }", this.response.getContentAsString());
+	}
+
+	@Test // SPR-13658
+	public void getResourceWithRegisteredMediaTypeDefaultStrategy() throws Exception {
+		ContentNegotiationManagerFactoryBean factory = new ContentNegotiationManagerFactoryBean();
+		factory.setFavorPathExtension(false);
+		factory.setDefaultContentType(new MediaType("foo", "bar"));
+		factory.afterPropertiesSet();
+		ContentNegotiationManager manager = factory.getObject();
+
+		List<Resource> paths = Collections.singletonList(new ClassPathResource("test/", getClass()));
+		this.handler = new ResourceHttpRequestHandler();
+		this.handler.setLocations(paths);
+		this.handler.setContentNegotiationManager(manager);
+		this.handler.afterPropertiesSet();
+
+		this.request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "foo.css");
+		this.handler.handleRequest(this.request, this.response);
+
+		assertEquals("foo/bar", this.response.getContentType());
+		assertEquals("h1 { color:red; }", this.response.getContentAsString());
 	}
 
 	@Test
@@ -508,45 +549,15 @@ public class ResourceHttpRequestHandlerTests {
 		assertEquals("t.", ranges[11]);
 	}
 
-	// SPR-12999
-	@Test @SuppressWarnings("unchecked")
-	public void writeContentNotGettingInputStream() throws Exception {
-		Resource resource = mock(Resource.class);
-		given(resource.getInputStream()).willThrow(FileNotFoundException.class);
-
-		this.handler.writeContent(this.response, resource);
-
-		assertEquals(200, this.response.getStatus());
-		assertEquals(0, this.response.getContentLength());
-	}
-
-	// SPR-12999
+	// SPR-14005
 	@Test
-	public void writeContentNotClosingInputStream() throws Exception {
-		Resource resource = mock(Resource.class);
-		InputStream inputStream = mock(InputStream.class);
-		given(resource.getInputStream()).willReturn(inputStream);
-		given(inputStream.read(any())).willReturn(-1);
-		doThrow(new NullPointerException()).when(inputStream).close();
+	public void doOverwriteExistingCacheControlHeaders() throws Exception {
+		this.request.setAttribute(HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE, "foo.css");
+		this.response.setHeader("Cache-Control", "no-store");
 
-		this.handler.writeContent(this.response, resource);
+		this.handler.handleRequest(this.request, this.response);
 
-		assertEquals(200, this.response.getStatus());
-		assertEquals(0, this.response.getContentLength());
-	}
-
-	// SPR-13620
-	@Test @SuppressWarnings("unchecked")
-	public void writeContentInputStreamThrowingNullPointerException() throws Exception {
-		Resource resource = mock(Resource.class);
-		InputStream in = mock(InputStream.class);
-		given(resource.getInputStream()).willReturn(in);
-		given(in.read(any())).willThrow(NullPointerException.class);
-
-		this.handler.writeContent(this.response, resource);
-
-		assertEquals(200, this.response.getStatus());
-		assertEquals(0, this.response.getContentLength());
+		assertEquals("max-age=3600", this.response.getHeader("Cache-Control"));
 	}
 
 

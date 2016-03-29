@@ -1955,7 +1955,7 @@ public class SpelReproTests extends AbstractExpressionTests {
 		res = parser.parseExpression("#root.![values()]").getValue(context, List.class);
 		assertEquals("[[test12, test11], [test22, test21]]", res.toString());
 	}
-	
+
 	@Test
 	public void AccessingFactoryBean_spr9511() {
 		StandardEvaluationContext context = new StandardEvaluationContext();
@@ -1964,22 +1964,24 @@ public class SpelReproTests extends AbstractExpressionTests {
 		assertEquals("custard", expr.getValue(context));
 		expr = new SpelExpressionParser().parseRaw("&foo");
 		assertEquals("foo factory",expr.getValue(context));
-		
+	
 		try {
 			expr = new SpelExpressionParser().parseRaw("&@foo");
 			fail("Illegal syntax, error expected");
-		} catch (SpelParseException spe) {
+		}
+		catch (SpelParseException spe) {
 			assertEquals(SpelMessage.INVALID_BEAN_REFERENCE,spe.getMessageCode());
 			assertEquals(0,spe.getPosition());
 		}
-		
+	
 		try {
 			expr = new SpelExpressionParser().parseRaw("@&foo");
 			fail("Illegal syntax, error expected");
-		} catch (SpelParseException spe) {
+		}
+		catch (SpelParseException spe) {
 			assertEquals(SpelMessage.INVALID_BEAN_REFERENCE,spe.getMessageCode());
 			assertEquals(0,spe.getPosition());
-		}		
+		}	
 	}
 
 	@Test

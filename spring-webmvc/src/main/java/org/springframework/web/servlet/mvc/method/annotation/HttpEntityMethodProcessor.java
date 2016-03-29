@@ -19,13 +19,19 @@ package org.springframework.web.servlet.mvc.method.annotation;
 import java.io.IOException;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.core.MethodParameter;
 import org.springframework.core.ResolvableType;
+import org.springframework.core.io.Resource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpRange;
+import org.springframework.http.HttpRangeResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.RequestEntity;
 import org.springframework.http.ResponseEntity;
@@ -162,9 +168,20 @@ public class HttpEntityMethodProcessor extends AbstractMessageConverterMethodPro
 		Assert.isInstanceOf(HttpEntity.class, returnValue);
 		HttpEntity<?> responseEntity = (HttpEntity<?>) returnValue;
 
+		HttpHeaders outputHeaders = outputMessage.getHeaders();
 		HttpHeaders entityHeaders = responseEntity.getHeaders();
+		if (outputHeaders.containsKey(HttpHeaders.VARY) && entityHeaders.containsKey(HttpHeaders.VARY)) {
+			List<String> values = getVaryRequestHeadersToAdd(outputHeaders, entityHeaders);
+			if (!values.isEmpty()) {
+				outputHeaders.setVary(values);
+			}
+		}
 		if (!entityHeaders.isEmpty()) {
-			outputMessage.getHeaders().putAll(entityHeaders);
+			for (Map.Entry<String, List<String>> entry : entityHeaders.entrySet()) {
+				if (!outputHeaders.containsKey(entry.getKey())) {
+					outputHeaders.put(entry.getKey(), entry.getValue());
+				}
+			}
 		}
 
 		Object body = responseEntity.getBody();
@@ -180,12 +197,47 @@ public class HttpEntityMethodProcessor extends AbstractMessageConverterMethodPro
 				return;
 			}
 		}
+		if (inputMessage.getHeaders().containsKey(HttpHeaders.RANGE) &&
+				Resource.class.isAssignableFrom(body.getClass())) {
+			try {
+				List<HttpRange> httpRanges = inputMessage.getHeaders().getRange();
+				Resource bodyResource = (Resource) body;
+				body = new HttpRangeResource(httpRanges, bodyResource);
+				outputMessage.setStatusCode(HttpStatus.PARTIAL_CONTENT);
+			}
+			catch (IllegalArgumentException ex) {
+				outputMessage.setStatusCode(HttpStatus.REQUESTED_RANGE_NOT_SATISFIABLE);
+				outputMessage.flush();
+				return;
+			}
+		}
 
 		// Try even with null body. ResponseBodyAdvice could get involved.
 		writeWithMessageConverters(body, returnType, inputMessage, outputMessage);
 
 		// Ensure headers are flushed even if no body was written.
 		outputMessage.flush();
+	}
+
+	private List<String> getVaryRequestHeadersToAdd(HttpHeaders responseHeaders, HttpHeaders entityHeaders) {
+		if (!responseHeaders.containsKey(HttpHeaders.VARY)) {
+			return entityHeaders.getVary();
+		}
+		List<String> entityHeadersVary = entityHeaders.getVary();
+		List<String> result = new ArrayList<String>(entityHeadersVary);
+		for (String header : responseHeaders.get(HttpHeaders.VARY)) {
+			for (String existing : StringUtils.tokenizeToStringArray(header, ",")) {
+				if ("*".equals(existing)) {
+					return Collections.emptyList();
+				}
+				for (String value : entityHeadersVary) {
+					if (value.equalsIgnoreCase(existing)) {
+						result.remove(value);
+					}
+				}
+			}
+		}
+		return result;
 	}
 
 	private boolean isResourceNotModified(ServletServerHttpRequest inputMessage, ServletServerHttpResponse outputMessage) {

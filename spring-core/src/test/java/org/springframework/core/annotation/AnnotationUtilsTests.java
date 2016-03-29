@@ -465,8 +465,8 @@ public class AnnotationUtilsTests {
 		assertNotNull(attributes);
 		assertEquals(WebMapping.class, attributes.annotationType());
 		assertEquals("name attribute: ", "foo", attributes.getString("name"));
-		assertEquals("value attribute: ", "/test", attributes.getString(VALUE));
-		assertEquals("path attribute: ", "/test", attributes.getString("path"));
+		assertArrayEquals("value attribute: ", asArray("/test"), attributes.getStringArray(VALUE));
+		assertArrayEquals("path attribute: ", asArray("/test"), attributes.getStringArray("path"));
 
 		method = WebController.class.getMethod("handleMappedWithPathAttribute");
 		webMapping = method.getAnnotation(WebMapping.class);
@@ -474,15 +474,18 @@ public class AnnotationUtilsTests {
 		assertNotNull(attributes);
 		assertEquals(WebMapping.class, attributes.annotationType());
 		assertEquals("name attribute: ", "bar", attributes.getString("name"));
-		assertEquals("value attribute: ", "/test", attributes.getString(VALUE));
-		assertEquals("path attribute: ", "/test", attributes.getString("path"));
+		assertArrayEquals("value attribute: ", asArray("/test"), attributes.getStringArray(VALUE));
+		assertArrayEquals("path attribute: ", asArray("/test"), attributes.getStringArray("path"));
+	}
 
+	@Test
+	public void getAnnotationAttributesWithAttributeAliasesWithDifferentValues() throws Exception {
 		exception.expect(AnnotationConfigurationException.class);
 		exception.expectMessage(containsString("attribute 'value' and its alias 'path'"));
-		exception.expectMessage(containsString("values of [/enigma] and [/test]"));
+		exception.expectMessage(containsString("values of [{/enigma}] and [{/test}]"));
 
-		method = WebController.class.getMethod("handleMappedWithDifferentPathAndValueAttributes");
-		webMapping = method.getAnnotation(WebMapping.class);
+		Method method = WebController.class.getMethod("handleMappedWithDifferentPathAndValueAttributes");
+		WebMapping webMapping = method.getAnnotation(WebMapping.class);
 		getAnnotationAttributes(webMapping);
 	}
 
@@ -776,6 +779,25 @@ public class AnnotationUtilsTests {
 	}
 
 	@Test
+	public void getAttributeAliasNamesFromComposedAnnotationWithImplicitAliasesWithImpliedAliasNamesOmitted()
+			throws Exception {
+
+		Method value = ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class.getDeclaredMethod("value");
+		Method location = ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class.getDeclaredMethod("location");
+		Method xmlFile = ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class.getDeclaredMethod("xmlFile");
+
+		// Meta-annotation attribute overrides
+		assertEquals("value", getAttributeOverrideName(value, ContextConfig.class));
+		assertEquals("location", getAttributeOverrideName(location, ContextConfig.class));
+		assertEquals("location", getAttributeOverrideName(xmlFile, ContextConfig.class));
+
+		// Implicit aliases
+		assertThat(getAttributeAliasNames(value), containsInAnyOrder("location", "xmlFile"));
+		assertThat(getAttributeAliasNames(location), containsInAnyOrder("value", "xmlFile"));
+		assertThat(getAttributeAliasNames(xmlFile), containsInAnyOrder("value", "location"));
+	}
+
+	@Test
 	public void getAttributeAliasNamesFromComposedAnnotationWithTransitiveImplicitAliases() throws Exception {
 		Method xml = TransitiveImplicitAliasesContextConfig.class.getDeclaredMethod("xml");
 		Method groovy = TransitiveImplicitAliasesContextConfig.class.getDeclaredMethod("groovy");
@@ -808,6 +830,26 @@ public class AnnotationUtilsTests {
 	}
 
 	@Test
+	public void getAttributeAliasNamesFromComposedAnnotationWithTransitiveImplicitAliasesWithImpliedAliasNamesOmitted()
+			throws Exception {
+
+		Method xml = TransitiveImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class.getDeclaredMethod("xml");
+		Method groovy = TransitiveImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class.getDeclaredMethod("groovy");
+
+		// Meta-annotation attribute overrides
+		assertEquals("location", getAttributeOverrideName(xml, ContextConfig.class));
+		assertEquals("location", getAttributeOverrideName(groovy, ContextConfig.class));
+
+		// Explicit meta-annotation attribute overrides
+		assertEquals("xmlFile", getAttributeOverrideName(xml, ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class));
+		assertEquals("location", getAttributeOverrideName(groovy, ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class));
+
+		// Transitive implicit aliases
+		assertThat(getAttributeAliasNames(groovy), containsInAnyOrder("xml"));
+		assertThat(getAttributeAliasNames(xml), containsInAnyOrder("groovy"));
+	}
+
+	@Test
 	public void synthesizeAnnotationWithoutAttributeAliases() throws Exception {
 		Component component = WebController.class.getAnnotation(Component.class);
 		assertNotNull(component);
@@ -835,8 +877,8 @@ public class AnnotationUtilsTests {
 		assertSame(synthesizedWebMapping, synthesizedAgainWebMapping);
 
 		assertEquals("name attribute: ", "foo", synthesizedAgainWebMapping.name());
-		assertEquals("aliased path attribute: ", "/test", synthesizedAgainWebMapping.path());
-		assertEquals("actual value attribute: ", "/test", synthesizedAgainWebMapping.value());
+		assertArrayEquals("aliased path attribute: ", asArray("/test"), synthesizedAgainWebMapping.path());
+		assertArrayEquals("actual value attribute: ", asArray("/test"), synthesizedAgainWebMapping.value());
 	}
 
 	@Test
@@ -956,16 +998,16 @@ public class AnnotationUtilsTests {
 		assertNotSame(webMapping, synthesizedWebMapping1);
 
 		assertEquals("name attribute: ", "foo", synthesizedWebMapping1.name());
-		assertEquals("aliased path attribute: ", "/test", synthesizedWebMapping1.path());
-		assertEquals("actual value attribute: ", "/test", synthesizedWebMapping1.value());
+		assertArrayEquals("aliased path attribute: ", asArray("/test"), synthesizedWebMapping1.path());
+		assertArrayEquals("actual value attribute: ", asArray("/test"), synthesizedWebMapping1.value());
 
 		WebMapping synthesizedWebMapping2 = synthesizeAnnotation(webMapping);
 		assertThat(synthesizedWebMapping2, instanceOf(SynthesizedAnnotation.class));
 		assertNotSame(webMapping, synthesizedWebMapping2);
 
 		assertEquals("name attribute: ", "foo", synthesizedWebMapping2.name());
-		assertEquals("aliased path attribute: ", "/test", synthesizedWebMapping2.path());
-		assertEquals("actual value attribute: ", "/test", synthesizedWebMapping2.value());
+		assertArrayEquals("aliased path attribute: ", asArray("/test"), synthesizedWebMapping2.path());
+		assertArrayEquals("actual value attribute: ", asArray("/test"), synthesizedWebMapping2.value());
 	}
 
 	@Test
@@ -987,6 +1029,31 @@ public class AnnotationUtilsTests {
 		assertEquals("location1: ", expected, synthesizedConfig.location1());
 		assertEquals("xmlFile: ", expected, synthesizedConfig.xmlFile());
 		assertEquals("groovyScript: ", expected, synthesizedConfig.groovyScript());
+	}
+
+	@Test
+	public void synthesizeAnnotationWithImplicitAliasesWithImpliedAliasNamesOmitted() throws Exception {
+		assertAnnotationSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(
+			ValueImplicitAliasesWithImpliedAliasNamesOmittedContextConfigClass.class, "value");
+		assertAnnotationSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(
+			LocationsImplicitAliasesWithImpliedAliasNamesOmittedContextConfigClass.class, "location");
+		assertAnnotationSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(
+			XmlFilesImplicitAliasesWithImpliedAliasNamesOmittedContextConfigClass.class, "xmlFile");
+	}
+
+	private void assertAnnotationSynthesisWithImplicitAliasesWithImpliedAliasNamesOmitted(Class<?> clazz,
+			String expected) throws Exception {
+
+		ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig config = clazz.getAnnotation(
+			ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class);
+		assertNotNull(config);
+
+		ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig synthesizedConfig = synthesizeAnnotation(config);
+		assertThat(synthesizedConfig, instanceOf(SynthesizedAnnotation.class));
+
+		assertEquals("value: ", expected, synthesizedConfig.value());
+		assertEquals("locations: ", expected, synthesizedConfig.location());
+		assertEquals("xmlFiles: ", expected, synthesizedConfig.xmlFile());
 	}
 
 	@Test
@@ -1183,6 +1250,21 @@ public class AnnotationUtilsTests {
 	}
 
 	@Test
+	public void synthesizeAnnotationFromMapWithAttributeAliasesThatOverrideArraysWithSingleElements() throws Exception {
+		Map<String, Object> map = Collections.singletonMap("value", "/foo");
+		Get get = synthesizeAnnotation(map, Get.class, null);
+		assertNotNull(get);
+		assertEquals("value: ", "/foo", get.value());
+		assertEquals("path: ", "/foo", get.path());
+
+		map = Collections.singletonMap("path", "/foo");
+		get = synthesizeAnnotation(map, Get.class, null);
+		assertNotNull(get);
+		assertEquals("value: ", "/foo", get.value());
+		assertEquals("path: ", "/foo", get.path());
+	}
+
+	@Test
 	public void synthesizeAnnotationFromMapWithImplicitAttributeAliases() throws Exception {
 		assertAnnotationSynthesisFromMapWithImplicitAliases("value");
 		assertAnnotationSynthesisFromMapWithImplicitAliases("location1");
@@ -1287,8 +1369,8 @@ public class AnnotationUtilsTests {
 	private void assertToStringForWebMappingWithPathAndValue(WebMapping webMapping) {
 		String string = webMapping.toString();
 		assertThat(string, startsWith("@" + WebMapping.class.getName() + "("));
-		assertThat(string, containsString("value=/test"));
-		assertThat(string, containsString("path=/test"));
+		assertThat(string, containsString("value=[/test]"));
+		assertThat(string, containsString("path=[/test]"));
 		assertThat(string, containsString("name=bar"));
 		assertThat(string, containsString("method="));
 		assertThat(string, containsString("[GET, POST]"));
@@ -1459,6 +1541,18 @@ public class AnnotationUtilsTests {
 		// Re-retrieve the array from the synthesized annotation
 		chars = synthesizedCharsContainer.chars();
 		assertArrayEquals(new char[] { 'x', 'y', 'z' }, chars);
+	}
+
+	@SafeVarargs
+	// The following "varargs" suppression is necessary for javac from OpenJDK
+	// (1.8.0_60-b27); however, Eclipse warns that it's unnecessary. See the following
+	// Eclipse issues for details.
+	//
+	// https://bugs.eclipse.org/bugs/show_bug.cgi?id=344783
+	// https://bugs.eclipse.org/bugs/show_bug.cgi?id=349669#c10
+	// @SuppressWarnings("varargs")
+	static <T> T[] asArray(T... arr) {
+		return arr;
 	}
 
 
@@ -1768,12 +1862,38 @@ public class AnnotationUtilsTests {
 		String name();
 
 		@AliasFor("path")
-		String value() default "";
+		String[] value() default "";
 
 		@AliasFor(attribute = "value")
-		String path() default "";
+		String[] path() default "";
 
 		RequestMethod[] method() default {};
+	}
+
+	/**
+	 * Mock of {@code org.springframework.web.bind.annotation.GetMapping}, except
+	 * that the String arrays are overridden with single String elements.
+	 */
+	@Retention(RetentionPolicy.RUNTIME)
+	@WebMapping(method = RequestMethod.GET, name = "")
+	@interface Get {
+
+		@AliasFor(annotation = WebMapping.class)
+		String value() default "";
+
+		@AliasFor(annotation = WebMapping.class)
+		String path() default "";
+	}
+
+	/**
+	 * Mock of {@code org.springframework.web.bind.annotation.PostMapping}, except
+	 * that the path is overridden by convention with single String element.
+	 */
+	@Retention(RetentionPolicy.RUNTIME)
+	@WebMapping(method = RequestMethod.POST, name = "")
+	@interface Post {
+
+		String path() default "";
 	}
 
 	@Component("webController")
@@ -1785,6 +1905,18 @@ public class AnnotationUtilsTests {
 
 		@WebMapping(path = "/test", name = "bar", method = { RequestMethod.GET, RequestMethod.POST })
 		public void handleMappedWithPathAttribute() {
+		}
+
+		@Get("/test")
+		public void getMappedWithValueAttribute() {
+		}
+
+		@Get(path = "/test")
+		public void getMappedWithPathAttribute() {
+		}
+
+		@Post(path = "/test")
+		public void postMappedWithPathAttribute() {
 		}
 
 		/**
@@ -2043,6 +2175,48 @@ public class AnnotationUtilsTests {
 	// Attribute value intentionally matches attribute name:
 	@ImplicitAliasesContextConfig(location3 = "location3")
 	static class Location3ImplicitAliasesContextConfigClass {
+	}
+
+	@ContextConfig
+	@Retention(RetentionPolicy.RUNTIME)
+	@interface ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig {
+
+		// intentionally omitted: attribute = "value"
+		@AliasFor(annotation = ContextConfig.class)
+		String value() default "";
+
+		// intentionally omitted: attribute = "locations"
+		@AliasFor(annotation = ContextConfig.class)
+		String location() default "";
+
+		@AliasFor(annotation = ContextConfig.class, attribute = "location")
+		String xmlFile() default "";
+	}
+
+	@ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig
+	@Retention(RetentionPolicy.RUNTIME)
+	@interface TransitiveImplicitAliasesWithImpliedAliasNamesOmittedContextConfig {
+
+		@AliasFor(annotation = ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class, attribute = "xmlFile")
+		String xml() default "";
+
+		@AliasFor(annotation = ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig.class, attribute = "location")
+		String groovy() default "";
+	}
+
+	// Attribute value intentionally matches attribute name:
+	@ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig("value")
+	static class ValueImplicitAliasesWithImpliedAliasNamesOmittedContextConfigClass {
+	}
+
+	// Attribute value intentionally matches attribute name:
+	@ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig(location = "location")
+	static class LocationsImplicitAliasesWithImpliedAliasNamesOmittedContextConfigClass {
+	}
+
+	// Attribute value intentionally matches attribute name:
+	@ImplicitAliasesWithImpliedAliasNamesOmittedContextConfig(xmlFile = "xmlFile")
+	static class XmlFilesImplicitAliasesWithImpliedAliasNamesOmittedContextConfigClass {
 	}
 
 	@ContextConfig
