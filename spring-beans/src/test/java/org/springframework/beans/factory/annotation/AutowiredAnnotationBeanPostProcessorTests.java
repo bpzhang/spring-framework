@@ -55,6 +55,7 @@ import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.beans.factory.support.GenericBeanDefinition;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.core.Ordered;
+import org.springframework.core.ResolvableType;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.core.annotation.Order;
 import org.springframework.tests.sample.beans.ITestBean;
@@ -917,7 +918,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		RootBeanDefinition tbm = new RootBeanDefinition(CollectionFactoryMethods.class);
 		tbm.setUniqueFactoryMethodName("testBeanMap");
 		bf.registerBeanDefinition("myTestBeanMap", tbm);
-		bf.registerSingleton("otherMap", new HashMap<Object, Object>());
+		bf.registerSingleton("otherMap", new HashMap<>());
 
 		MapConstructorInjectionBean bean = (MapConstructorInjectionBean) bf.getBean("annotatedBean");
 		assertSame(bf.getBean("myTestBeanMap"), bean.getTestBeanMap());
@@ -939,7 +940,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		tbs.add(new TestBean("tb1"));
 		tbs.add(new TestBean("tb2"));
 		bf.registerSingleton("testBeans", tbs);
-		bf.registerSingleton("otherSet", new HashSet<Object>());
+		bf.registerSingleton("otherSet", new HashSet<>());
 
 		SetConstructorInjectionBean bean = (SetConstructorInjectionBean) bf.getBean("annotatedBean");
 		assertSame(tbs, bean.getTestBeanSet());
@@ -960,7 +961,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		RootBeanDefinition tbs = new RootBeanDefinition(CollectionFactoryMethods.class);
 		tbs.setUniqueFactoryMethodName("testBeanSet");
 		bf.registerBeanDefinition("myTestBeanSet", tbs);
-		bf.registerSingleton("otherSet", new HashSet<Object>());
+		bf.registerSingleton("otherSet", new HashSet<>());
 
 		SetConstructorInjectionBean bean = (SetConstructorInjectionBean) bf.getBean("annotatedBean");
 		assertSame(bf.getBean("myTestBeanSet"), bean.getTestBeanSet());
@@ -1633,6 +1634,8 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		assertSame(1, bean.stringRepositoryMap.size());
 		assertSame(repo, bean.repositoryMap.get("repo"));
 		assertSame(repo, bean.stringRepositoryMap.get("repo"));
+
+		assertArrayEquals(new String[] {"repo"}, bf.getBeanNamesForType(ResolvableType.forClassWithGenerics(Repository.class, String.class)));
 	}
 
 	@Test
@@ -2018,6 +2021,9 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		GenericInterface1Impl bean1 = (GenericInterface1Impl) bf.getBean("bean1");
 		GenericInterface2Impl bean2 = (GenericInterface2Impl) bf.getBean("bean2");
 		assertSame(bean2, bean1.gi2);
+
+		assertArrayEquals(new String[] {"bean1"}, bf.getBeanNamesForType(ResolvableType.forClassWithGenerics(GenericInterface1.class, String.class)));
+		assertArrayEquals(new String[] {"bean2"}, bf.getBeanNamesForType(ResolvableType.forClassWithGenerics(GenericInterface2.class, String.class)));
 	}
 
 	@Test
@@ -3076,7 +3082,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 
 	public interface GenericInterface1<T> {
 
-		public String doSomethingGeneric(T o);
+		String doSomethingGeneric(T o);
 	}
 
 
@@ -3095,7 +3101,7 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 		}
 
 		public static GenericInterface1<String> createErased() {
-			return new GenericInterface1Impl<String>();
+			return new GenericInterface1Impl<>();
 		}
 
 		@SuppressWarnings("rawtypes")
@@ -3251,14 +3257,14 @@ public class AutowiredAnnotationBeanPostProcessorTests {
 	public static class CollectionFactoryMethods {
 
 		public static Map<String, TestBean> testBeanMap() {
-			Map<String, TestBean> tbm = new LinkedHashMap<String, TestBean>();
+			Map<String, TestBean> tbm = new LinkedHashMap<>();
 			tbm.put("testBean1", new TestBean("tb1"));
 			tbm.put("testBean2", new TestBean("tb2"));
 			return tbm;
 		}
 
 		public static Set<TestBean> testBeanSet() {
-			Set<TestBean> tbs = new LinkedHashSet<TestBean>();
+			Set<TestBean> tbs = new LinkedHashSet<>();
 			tbs.add(new TestBean("tb1"));
 			tbs.add(new TestBean("tb2"));
 			return tbs;

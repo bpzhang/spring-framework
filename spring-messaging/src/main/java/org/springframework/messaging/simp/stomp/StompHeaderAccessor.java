@@ -17,6 +17,7 @@
 package org.springframework.messaging.simp.stomp;
 
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -440,8 +441,8 @@ public class StompHeaderAccessor extends SimpMessageHeaderAccessor {
 		if (bytes.length == 0 || getContentType() == null || !isReadableContentType()) {
 			return contentType;
 		}
-		Charset charset = getContentType().getCharSet();
-		charset = (charset != null ? charset : StompDecoder.UTF8_CHARSET);
+		Charset charset = getContentType().getCharset();
+		charset = (charset != null ? charset : StandardCharsets.UTF_8);
 		return (bytes.length < 80) ?
 				contentType + " payload=" + new String(bytes, charset) :
 				contentType + " payload=" + new String(Arrays.copyOf(bytes, 80), charset) + "...(truncated)";
