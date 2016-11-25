@@ -111,7 +111,7 @@ public class ResourceRegionHttpMessageConverter extends AbstractGenericHttpMessa
 		}
 		else {
 			Collection<ResourceRegion> regions = (Collection<ResourceRegion>) object;
-			if(regions.size() == 1) {
+			if (regions.size() == 1) {
 				writeResourceRegion(regions.iterator().next(), outputMessage);
 			}
 			else {
@@ -128,7 +128,7 @@ public class ResourceRegionHttpMessageConverter extends AbstractGenericHttpMessa
 		Long resourceLength = region.getResource().contentLength();
 		end = Math.min(end, resourceLength - 1);
 		long rangeLength = end - start + 1;
-		responseHeaders.add("Content-Range", "bytes " + start + "-" + end + "/" + resourceLength);
+		responseHeaders.add("Content-Range", "bytes " + start + '-' + end + '/' + resourceLength);
 		responseHeaders.setContentLength(rangeLength);
 		InputStream in = region.getResource().getInputStream();
 		try {
@@ -167,7 +167,7 @@ public class ResourceRegionHttpMessageConverter extends AbstractGenericHttpMessa
 			}
 			Long resourceLength = region.getResource().contentLength();
 			end = Math.min(end, resourceLength - 1);
-			print(out, "Content-Range: bytes " + start + "-" + end + "/" + resourceLength);
+			print(out, "Content-Range: bytes " + start + '-' + end + '/' + resourceLength);
 			println(out);
 			println(out);
 			// Printing content

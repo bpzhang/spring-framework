@@ -23,12 +23,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
+import io.reactivex.BackpressureStrategy;
+import io.reactivex.Flowable;
+import io.reactivex.Maybe;
 import org.reactivestreams.Publisher;
-import reactor.adapter.RxJava1Adapter;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import rx.Completable;
 import rx.Observable;
+import rx.RxReactiveStreams;
 import rx.Single;
 
 import org.springframework.util.ClassUtils;
@@ -41,12 +44,19 @@ import org.springframework.util.ClassUtils;
  * registered via {@link #registerFluxAdapter} and {@link #registerMonoAdapter}.
  *
  * @author Rossen Stoyanchev
+ * @author Sebastien Deleuze
  * @since 5.0
  */
 public class ReactiveAdapterRegistry {
 
 	private static final boolean rxJava1Present =
 			ClassUtils.isPresent("rx.Observable", ReactiveAdapterRegistry.class.getClassLoader());
+
+	private static final boolean rxJava1Adapter =
+			ClassUtils.isPresent("rx.RxReactiveStreams", ReactiveAdapterRegistry.class.getClassLoader());
+
+	private static final boolean rxJava2Present =
+			ClassUtils.isPresent("io.reactivex.Flowable", ReactiveAdapterRegistry.class.getClassLoader());
 
 	private final Map<Class<?>, ReactiveAdapter> adapterMap = new LinkedHashMap<>(4);
 
@@ -69,8 +79,11 @@ public class ReactiveAdapterRegistry {
 				new ReactiveAdapter.Descriptor(false, true, false)
 		);
 
-		if (rxJava1Present) {
+		if (rxJava1Present && rxJava1Adapter) {
 			new RxJava1AdapterRegistrar().register(this);
+		}
+		if (rxJava2Present) {
+			new RxJava2AdapterRegistrar().register(this);
 		}
 	}
 
@@ -253,17 +266,46 @@ public class ReactiveAdapterRegistry {
 
 		public void register(ReactiveAdapterRegistry registry) {
 			registry.registerFluxAdapter(Observable.class,
-					source -> RxJava1Adapter.observableToFlux((Observable<?>) source),
-					RxJava1Adapter::publisherToObservable
+					source -> Flux.from(RxReactiveStreams.toPublisher((Observable<?>) source)),
+					RxReactiveStreams::toObservable
 			);
 			registry.registerMonoAdapter(Single.class,
-					source -> RxJava1Adapter.singleToMono((Single<?>) source),
-					RxJava1Adapter::publisherToSingle,
+					source -> Mono.from(RxReactiveStreams.toPublisher((Single<?>) source)),
+					RxReactiveStreams::toSingle,
 					new ReactiveAdapter.Descriptor(false, false, false)
 			);
 			registry.registerMonoAdapter(Completable.class,
-					source -> RxJava1Adapter.completableToMono((Completable) source),
-					RxJava1Adapter::publisherToCompletable,
+					source -> Mono.from(RxReactiveStreams.toPublisher((Completable) source)),
+					RxReactiveStreams::toCompletable,
+					new ReactiveAdapter.Descriptor(false, true, true)
+			);
+		}
+	}
+
+	private static class RxJava2AdapterRegistrar {
+
+		public void register(ReactiveAdapterRegistry registry) {
+			registry.registerFluxAdapter(Flowable.class,
+					source -> Flux.from((Flowable<?>) source),
+					source-> Flowable.fromPublisher(source)
+			);
+			registry.registerFluxAdapter(io.reactivex.Observable.class,
+					source -> Flux.from(((io.reactivex.Observable<?>) source).toFlowable(BackpressureStrategy.BUFFER)),
+					source -> Flowable.fromPublisher(source).toObservable()
+			);
+			registry.registerMonoAdapter(io.reactivex.Single.class,
+					source -> Mono.from(((io.reactivex.Single<?>) source).toFlowable()),
+					source -> Flowable.fromPublisher(source).toObservable().singleElement().toSingle(),
+					new ReactiveAdapter.Descriptor(false, false, false)
+			);
+			registry.registerMonoAdapter(Maybe.class,
+					source -> Mono.from(((Maybe<?>) source).toFlowable()),
+					source -> Flowable.fromPublisher(source).toObservable().singleElement(),
+					new ReactiveAdapter.Descriptor(false, true, false)
+			);
+			registry.registerMonoAdapter(io.reactivex.Completable.class,
+					source -> Mono.from(((io.reactivex.Completable) source).toFlowable()),
+					source -> Flowable.fromPublisher(source).toObservable().ignoreElements(),
 					new ReactiveAdapter.Descriptor(false, true, true)
 			);
 		}

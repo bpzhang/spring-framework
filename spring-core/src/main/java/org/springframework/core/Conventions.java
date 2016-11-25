@@ -50,13 +50,10 @@ public abstract class Conventions {
 	 * when searching for the 'primary' interface of a proxy.
 	 */
 	private static final Set<Class<?>> IGNORED_INTERFACES;
+
 	static {
-		IGNORED_INTERFACES = Collections.unmodifiableSet(
-				new HashSet<>(Arrays.<Class<?>>asList(
-						Serializable.class,
-						Externalizable.class,
-						Cloneable.class,
-						Comparable.class)));
+		IGNORED_INTERFACES = Collections.unmodifiableSet(new HashSet<>(
+				Arrays.asList(Serializable.class, Externalizable.class, Cloneable.class, Comparable.class)));
 	}
 
 
@@ -244,7 +241,7 @@ public abstract class Conventions {
 	public static String getQualifiedAttributeName(Class<?> enclosingClass, String attributeName) {
 		Assert.notNull(enclosingClass, "'enclosingClass' must not be null");
 		Assert.notNull(attributeName, "'attributeName' must not be null");
-		return enclosingClass.getName() + "." + attributeName;
+		return enclosingClass.getName() + '.' + attributeName;
 	}
 
 

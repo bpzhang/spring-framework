@@ -19,20 +19,29 @@ package org.springframework.web.client.reactive;
 import org.springframework.core.NestedRuntimeException;
 
 /**
- * Base class for exceptions thrown by {@link WebClient}.
- *
- * @author Brian Clozel
+ * Exception published by {@link WebClient} in case of errors.
+  *
+ * @author Arjen Poutsma
  * @since 5.0
  */
 @SuppressWarnings("serial")
 public class WebClientException extends NestedRuntimeException {
 
+	/**
+	 * Construct a new instance of {@code WebClientException} with the given message.
+	 * @param msg the message
+	 */
 	public WebClientException(String msg) {
 		super(msg);
 	}
 
-	public WebClientException(String msg, Throwable cause) {
-		super(msg, cause);
+	/**
+	 * Construct a new instance of {@code WebClientException} with the given message and
+	 * exception.
+	 * @param msg the message
+	 * @param ex the exception
+	 */
+	public WebClientException(String msg, Throwable ex) {
+		super(msg, ex);
 	}
-
 }

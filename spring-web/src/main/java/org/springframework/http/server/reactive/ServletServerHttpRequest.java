@@ -49,67 +49,67 @@ import org.springframework.util.StringUtils;
  */
 public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 
-	private final Object bodyPublisherMonitor = new Object();
-
-	private volatile RequestBodyPublisher bodyPublisher;
-
 	private final HttpServletRequest request;
 
 	private final DataBufferFactory dataBufferFactory;
 
 	private final int bufferSize;
 
+	private final Object bodyPublisherMonitor = new Object();
+
+	private volatile RequestBodyPublisher bodyPublisher;
+
+	private final Object cookieLock = new Object();
+
+
 	public ServletServerHttpRequest(HttpServletRequest request,
-			DataBufferFactory dataBufferFactory, int bufferSize) {
-		Assert.notNull(request, "'request' must not be null.");
-		Assert.notNull(dataBufferFactory, "'dataBufferFactory' must not be null");
-		Assert.isTrue(bufferSize > 0);
+			DataBufferFactory bufferFactory, int bufferSize) {
+
+		super(initUri(request), initHeaders(request));
+
+		Assert.notNull(bufferFactory, "'bufferFactory' must not be null");
+		Assert.isTrue(bufferSize > 0, "'bufferSize' must be higher than 0");
 
 		this.request = request;
-		this.dataBufferFactory = dataBufferFactory;
+		this.dataBufferFactory = bufferFactory;
 		this.bufferSize = bufferSize;
 	}
 
-	public HttpServletRequest getServletRequest() {
-		return this.request;
-	}
-
-	@Override
-	public HttpMethod getMethod() {
-		return HttpMethod.valueOf(getServletRequest().getMethod());
-	}
-
-	@Override
-	protected URI initUri() throws URISyntaxException {
-		StringBuffer url = this.request.getRequestURL();
-		String query = this.request.getQueryString();
-		if (StringUtils.hasText(query)) {
-			url.append('?').append(query);
+	private static URI initUri(HttpServletRequest request) {
+		Assert.notNull(request, "'request' must not be null");
+		try {
+			StringBuffer url = request.getRequestURL();
+			String query = request.getQueryString();
+			if (StringUtils.hasText(query)) {
+				url.append('?').append(query);
+			}
+			return new URI(url.toString());
 		}
-		return new URI(url.toString());
+		catch (URISyntaxException ex) {
+			throw new IllegalStateException("Could not get URI: " + ex.getMessage(), ex);
+		}
 	}
 
-	@Override
-	protected HttpHeaders initHeaders() {
+	private static HttpHeaders initHeaders(HttpServletRequest request) {
 		HttpHeaders headers = new HttpHeaders();
-		for (Enumeration<?> names = getServletRequest().getHeaderNames();
-		     names.hasMoreElements(); ) {
+		for (Enumeration<?> names = request.getHeaderNames();
+			 names.hasMoreElements(); ) {
 			String name = (String) names.nextElement();
-			for (Enumeration<?> values = getServletRequest().getHeaders(name);
-			     values.hasMoreElements(); ) {
+			for (Enumeration<?> values = request.getHeaders(name);
+				 values.hasMoreElements(); ) {
 				headers.add(name, (String) values.nextElement());
 			}
 		}
 		MediaType contentType = headers.getContentType();
 		if (contentType == null) {
-			String requestContentType = getServletRequest().getContentType();
+			String requestContentType = request.getContentType();
 			if (StringUtils.hasLength(requestContentType)) {
 				contentType = MediaType.parseMediaType(requestContentType);
 				headers.setContentType(contentType);
 			}
 		}
 		if (contentType != null && contentType.getCharset() == null) {
-			String encoding = getServletRequest().getCharacterEncoding();
+			String encoding = request.getCharacterEncoding();
 			if (StringUtils.hasLength(encoding)) {
 				Charset charset = Charset.forName(encoding);
 				Map<String, String> params = new LinkedCaseInsensitiveMap<>();
@@ -121,7 +121,7 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 			}
 		}
 		if (headers.getContentLength() == -1) {
-			int contentLength = getServletRequest().getContentLength();
+			int contentLength = request.getContentLength();
 			if (contentLength != -1) {
 				headers.setContentLength(contentLength);
 			}
@@ -129,10 +129,28 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 		return headers;
 	}
 
+
+	public HttpServletRequest getServletRequest() {
+		return this.request;
+	}
+
+	@Override
+	public HttpMethod getMethod() {
+		return HttpMethod.valueOf(getServletRequest().getMethod());
+	}
+
+	@Override
+	public String getContextPath() {
+		return getServletRequest().getContextPath();
+	}
+
 	@Override
 	protected MultiValueMap<String, HttpCookie> initCookies() {
 		MultiValueMap<String, HttpCookie> httpCookies = new LinkedMultiValueMap<>();
-		Cookie[] cookies = this.request.getCookies();
+		Cookie[] cookies;
+		synchronized (this.cookieLock) {
+			cookies = this.request.getCookies();
+		}
 		if (cookies != null) {
 			for (Cookie cookie : cookies) {
 				String name = cookie.getName();
@@ -151,7 +169,8 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 				synchronized (this.bodyPublisherMonitor) {
 					bodyPublisher = this.bodyPublisher;
 					if (bodyPublisher == null) {
-						this.bodyPublisher = bodyPublisher = createBodyPublisher();
+						bodyPublisher = createBodyPublisher();
+						this.bodyPublisher = bodyPublisher;
 					}
 				}
 			}
@@ -162,13 +181,27 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 		}
 	}
 
+	/** Handle a timeout/error callback from the Servlet container */
+	void handleAsyncListenerError(Throwable ex) {
+		if (this.bodyPublisher != null) {
+			this.bodyPublisher.onError(ex);
+		}
+	}
+
+	/** Handle a complete callback from the Servlet container */
+	void handleAsyncListenerComplete() {
+		if (this.bodyPublisher != null) {
+			this.bodyPublisher.onAllDataRead();
+		}
+	}
+
 	private RequestBodyPublisher createBodyPublisher() throws IOException {
-		RequestBodyPublisher bodyPublisher =
-				new RequestBodyPublisher(request.getInputStream(), this.dataBufferFactory,
-						this.bufferSize);
+		RequestBodyPublisher bodyPublisher = new RequestBodyPublisher(
+				this.request.getInputStream(), this.dataBufferFactory, this.bufferSize);
 		bodyPublisher.registerListener();
 		return bodyPublisher;
 	}
+
 
 	private static class RequestBodyPublisher extends AbstractRequestBodyPublisher {
 
@@ -183,6 +216,7 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 
 		public RequestBodyPublisher(ServletInputStream inputStream,
 				DataBufferFactory dataBufferFactory, int bufferSize) {
+
 			this.inputStream = inputStream;
 			this.dataBufferFactory = dataBufferFactory;
 			this.buffer = new byte[bufferSize];
@@ -216,6 +250,7 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 			return null;
 		}
 
+
 		private class RequestBodyReadListener implements ReadListener {
 
 			@Override
@@ -235,4 +270,5 @@ public class ServletServerHttpRequest extends AbstractServerHttpRequest {
 			}
 		}
 	}
+
 }

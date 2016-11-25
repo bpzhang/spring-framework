@@ -276,7 +276,7 @@ public class ResolvableType implements Serializable {
 		WildcardBounds ourBounds = WildcardBounds.get(this);
 		WildcardBounds typeBounds = WildcardBounds.get(other);
 
-		// In the from X is assignable to <? extends Number>
+		// In the form X is assignable to <? extends Number>
 		if (typeBounds != null) {
 			return (ourBounds != null && ourBounds.isSameKind(typeBounds) &&
 					ourBounds.isAssignableFrom(typeBounds.getBounds()));
@@ -837,7 +837,7 @@ public class ResolvableType implements Serializable {
 		}
 		if (this.typeProvider != otherType.typeProvider &&
 				(this.typeProvider == null || otherType.typeProvider == null ||
-				!ObjectUtils.nullSafeEquals(this.typeProvider.getSource(), otherType.typeProvider.getSource()))) {
+				!ObjectUtils.nullSafeEquals(this.typeProvider.getType(), otherType.typeProvider.getType()))) {
 			return false;
 		}
 		if (this.variableResolver != otherType.variableResolver &&
@@ -859,7 +859,7 @@ public class ResolvableType implements Serializable {
 	private int calculateHashCode() {
 		int hashCode = ObjectUtils.nullSafeHashCode(this.type);
 		if (this.typeProvider != null) {
-			hashCode = 31 * hashCode + ObjectUtils.nullSafeHashCode(this.typeProvider.getSource());
+			hashCode = 31 * hashCode + ObjectUtils.nullSafeHashCode(this.typeProvider.getType());
 		}
 		if (this.variableResolver != null) {
 			hashCode = 31 * hashCode + ObjectUtils.nullSafeHashCode(this.variableResolver.getSource());
@@ -937,7 +937,7 @@ public class ResolvableType implements Serializable {
 	 * Return a {@link ResolvableType} for the specified {@link Class}, doing
 	 * assignability checks against the raw class only (analogous to
 	 * {@link Class#isAssignableFrom}, which this serves as a wrapper for.
-	 * For example: {@code ResolvableType.forClass(MyArrayList.class)}.
+	 * For example: {@code ResolvableType.forRawClass(List.class)}.
 	 * @param sourceClass the source class ({@code null} is semantically
 	 * equivalent to {@code Object.class} for typical use cases here}
 	 * @return a {@link ResolvableType} for the specified class
@@ -950,6 +950,11 @@ public class ResolvableType implements Serializable {
 			@Override
 			public boolean isAssignableFrom(Class<?> other) {
 				return ClassUtils.isAssignable(getRawClass(), other);
+			}
+			@Override
+			public boolean isAssignableFrom(ResolvableType other) {
+				Class<?> otherClass = other.getRawClass();
+				return (otherClass != null && ClassUtils.isAssignable(getRawClass(), otherClass));
 			}
 		};
 	}

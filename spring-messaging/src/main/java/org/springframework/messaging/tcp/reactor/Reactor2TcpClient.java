@@ -151,15 +151,13 @@ public class Reactor2TcpClient<P> implements TcpOperations<P> {
 		try {
 			ioThreadCount = Integer.parseInt(System.getProperty("reactor.tcp.ioThreadCount"));
 		}
-		catch (Exception ex) {
+		catch (Throwable ex) {
 			ioThreadCount = -1;
 		}
-		if (ioThreadCount <= 0l) {
+		if (ioThreadCount <= 0) {
 			ioThreadCount = Runtime.getRuntime().availableProcessors();
 		}
-
-		return new NioEventLoopGroup(ioThreadCount,
-				new NamedDaemonThreadFactory("reactor-tcp-io"));
+		return new NioEventLoopGroup(ioThreadCount, new NamedDaemonThreadFactory("reactor-tcp-io"));
 	}
 
 
@@ -301,8 +299,7 @@ public class Reactor2TcpClient<P> implements TcpOperations<P> {
 
 		@Override
 		public ReactorConfiguration read() {
-			return new ReactorConfiguration(
-					Collections.<DispatcherConfiguration>emptyList(), "sync", new Properties());
+			return new ReactorConfiguration(Collections.emptyList(), "sync", new Properties());
 		}
 	}
 

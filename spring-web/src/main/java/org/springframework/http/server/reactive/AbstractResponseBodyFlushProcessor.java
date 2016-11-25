@@ -74,8 +74,8 @@ abstract class AbstractResponseBodyFlushProcessor implements Processor<Publisher
 
 	@Override
 	public final void onError(Throwable t) {
-		if (logger.isErrorEnabled()) {
-			logger.error(this.state + " onError: " + t, t);
+		if (logger.isTraceEnabled()) {
+			logger.trace(this.state + " onError: " + t);
 		}
 		this.state.get().onError(this, t);
 	}
@@ -120,7 +120,7 @@ abstract class AbstractResponseBodyFlushProcessor implements Processor<Publisher
 
 	}
 
-	private void cancel() {
+	protected void cancel() {
 		this.subscription.cancel();
 	}
 

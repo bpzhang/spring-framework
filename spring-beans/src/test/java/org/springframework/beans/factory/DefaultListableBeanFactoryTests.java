@@ -44,7 +44,7 @@ import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
-import org.mockito.Matchers;
+import org.mockito.ArgumentMatchers;
 
 import org.springframework.beans.BeansException;
 import org.springframework.beans.MutablePropertyValues;
@@ -1219,7 +1219,7 @@ public class DefaultListableBeanFactoryTests {
 	public void testExpressionInStringArray() {
 		DefaultListableBeanFactory bf = new DefaultListableBeanFactory();
 		BeanExpressionResolver beanExpressionResolver = mock(BeanExpressionResolver.class);
-		when(beanExpressionResolver.evaluate(eq("#{foo}"), Matchers.any(BeanExpressionContext.class)))
+		when(beanExpressionResolver.evaluate(eq("#{foo}"), ArgumentMatchers.any(BeanExpressionContext.class)))
 				.thenReturn("classpath:/org/springframework/beans/factory/xml/util.properties");
 		bf.setBeanExpressionResolver(beanExpressionResolver);
 
@@ -1435,12 +1435,14 @@ public class DefaultListableBeanFactoryTests {
 	public void testGetBeanByTypeWithPrimary() throws Exception {
 		DefaultListableBeanFactory lbf = new DefaultListableBeanFactory();
 		RootBeanDefinition bd1 = new RootBeanDefinition(TestBean.class);
+		bd1.setLazyInit(true);
 		RootBeanDefinition bd2 = new RootBeanDefinition(TestBean.class);
 		bd2.setPrimary(true);
 		lbf.registerBeanDefinition("bd1", bd1);
 		lbf.registerBeanDefinition("bd2", bd2);
 		TestBean bean = lbf.getBean(TestBean.class);
 		assertThat(bean.getBeanName(), equalTo("bd2"));
+		assertFalse(lbf.containsSingleton("bd1"));
 	}
 
 	@Test
@@ -1744,24 +1746,6 @@ public class DefaultListableBeanFactoryTests {
 
 	@Test
 	public void testAutowireBeanByTypeWithTwoMatches() {
-		DefaultListableBeanFactory lbf = new DefaultListableBeanFactory();
-		RootBeanDefinition bd = new RootBeanDefinition(TestBean.class);
-		RootBeanDefinition bd2 = new RootBeanDefinition(TestBean.class);
-		lbf.registerBeanDefinition("test", bd);
-		lbf.registerBeanDefinition("spouse", bd2);
-		try {
-			lbf.autowire(DependenciesBean.class, AutowireCapableBeanFactory.AUTOWIRE_BY_TYPE, true);
-			fail("Should have thrown UnsatisfiedDependencyException");
-		}
-		catch (UnsatisfiedDependencyException ex) {
-			// expected
-			assertTrue(ex.getMessage().contains("test"));
-			assertTrue(ex.getMessage().contains("spouse"));
-		}
-	}
-
-	@Test
-	public void testAutowireBeanByTypeWithTwoMatchesAndParameterNameDiscovery() {
 		DefaultListableBeanFactory lbf = new DefaultListableBeanFactory();
 		RootBeanDefinition bd = new RootBeanDefinition(TestBean.class);
 		RootBeanDefinition bd2 = new RootBeanDefinition(TestBean.class);
@@ -2722,13 +2706,13 @@ public class DefaultListableBeanFactoryTests {
 		bf.addEmbeddedValueResolver(r3);
 		given(r1.resolveStringValue("A")).willReturn("B");
 		given(r2.resolveStringValue("B")).willReturn(null);
-		given(r3.resolveStringValue(isNull(String.class))).willThrow(new IllegalArgumentException());
+		given(r3.resolveStringValue(isNull())).willThrow(new IllegalArgumentException());
 
 		bf.resolveEmbeddedValue("A");
 
 		verify(r1).resolveStringValue("A");
 		verify(r2).resolveStringValue("B");
-		verify(r3, never()).resolveStringValue(isNull(String.class));
+		verify(r3, never()).resolveStringValue(isNull());
 	}
 
 	@Test

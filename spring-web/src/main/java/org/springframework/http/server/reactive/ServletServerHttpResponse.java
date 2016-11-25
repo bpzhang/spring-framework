@@ -46,25 +46,31 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 
 	private final ResponseBodyWriteListener writeListener = new ResponseBodyWriteListener();
 
-	private volatile ResponseBodyProcessor bodyProcessor;
-
 	private final HttpServletResponse response;
 
 	private final int bufferSize;
 
 	private volatile boolean flushOnNext;
 
+	private volatile ResponseBodyProcessor bodyProcessor;
+
+	private volatile ResponseBodyFlushProcessor bodyFlushProcessor;
+
 
 	public ServletServerHttpResponse(HttpServletResponse response,
 			DataBufferFactory dataBufferFactory, int bufferSize) throws IOException {
 
 		super(dataBufferFactory);
-		Assert.notNull(response, "'response' must not be null");
-		Assert.notNull(dataBufferFactory, "'dataBufferFactory' must not be null");
-		Assert.isTrue(bufferSize > 0);
+
+		Assert.notNull(response, "HttpServletResponse must not be null");
+		Assert.notNull(dataBufferFactory, "DataBufferFactory must not be null");
+		Assert.isTrue(bufferSize > 0, "Buffer size must be higher than 0");
 
 		this.response = response;
 		this.bufferSize = bufferSize;
+
+		// Tomcat expects WriteListener registration on initial thread
+		registerListener();
 	}
 
 
@@ -73,7 +79,7 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 	}
 
 	@Override
-	protected void writeStatusCode() {
+	protected void applyStatusCode() {
 		HttpStatus statusCode = this.getStatusCode();
 		if (statusCode != null) {
 			getServletResponse().setStatus(statusCode.value());
@@ -81,7 +87,7 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 	}
 
 	@Override
-	protected void writeHeaders() {
+	protected void applyHeaders() {
 		for (Map.Entry<String, List<String>> entry : getHeaders().entrySet()) {
 			String headerName = entry.getKey();
 			for (String headerValue : entry.getValue()) {
@@ -99,7 +105,7 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 	}
 
 	@Override
-	protected void writeCookies() {
+	protected void applyCookies() {
 		for (String name : getCookies().keySet()) {
 			for (ResponseCookie httpCookie : getCookies().get(name)) {
 				Cookie cookie = new Cookie(name, httpCookie.getValue());
@@ -117,17 +123,17 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 
 	@Override
 	protected Processor<Publisher<DataBuffer>, Void> createBodyFlushProcessor() {
-		Processor<Publisher<DataBuffer>, Void> processor = new ResponseBodyFlushProcessor();
-		registerListener();
+		ResponseBodyFlushProcessor processor = new ResponseBodyFlushProcessor();
+		this.bodyFlushProcessor = processor;
 		return processor;
 	}
 
 	private void registerListener() {
 		try {
-			outputStream().setWriteListener(writeListener);
+			outputStream().setWriteListener(this.writeListener);
 		}
-		catch (IOException e) {
-			throw new UncheckedIOException(e);
+		catch (IOException ex) {
+			throw new UncheckedIOException(ex);
 		}
 	}
 
@@ -152,6 +158,30 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 		}
 	}
 
+	/** Handle a timeout/error callback from the Servlet container */
+	void handleAsyncListenerError(Throwable ex) {
+		if (this.bodyFlushProcessor != null) {
+			this.bodyFlushProcessor.cancel();
+			this.bodyFlushProcessor.onError(ex);
+		}
+		if (this.bodyProcessor != null) {
+			this.bodyProcessor.cancel();
+			this.bodyProcessor.onError(ex);
+		}
+	}
+
+	/** Handle a complete callback from the Servlet container */
+	void handleAsyncListenerComplete() {
+		if (this.bodyFlushProcessor != null) {
+			this.bodyFlushProcessor.cancel();
+			this.bodyFlushProcessor.onComplete();
+		}
+		if (this.bodyProcessor != null) {
+			this.bodyProcessor.cancel();
+			this.bodyProcessor.onComplete();
+		}
+	}
+
 
 	private class ResponseBodyProcessor extends AbstractResponseBodyProcessor {
 
@@ -159,12 +189,10 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 
 		private final int bufferSize;
 
-
 		public ResponseBodyProcessor(ServletOutputStream outputStream, int bufferSize) {
 			this.outputStream = outputStream;
 			this.bufferSize = bufferSize;
 		}
-
 
 		@Override
 		protected boolean isWritePossible() {
@@ -179,13 +207,10 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 				}
 				flush();
 			}
-
 			boolean ready = this.outputStream.isReady();
-
 			if (this.logger.isTraceEnabled()) {
 				this.logger.trace("write: " + dataBuffer + " ready: " + ready);
 			}
-
 			if (ready) {
 				int total = dataBuffer.readableByteCount();
 				int written = writeDataBuffer(dataBuffer);
@@ -202,20 +227,17 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 
 		private int writeDataBuffer(DataBuffer dataBuffer) throws IOException {
 			InputStream input = dataBuffer.asInputStream();
-
 			int bytesWritten = 0;
 			byte[] buffer = new byte[this.bufferSize];
 			int bytesRead = -1;
-
 			while (this.outputStream.isReady() && (bytesRead = input.read(buffer)) != -1) {
 				this.outputStream.write(buffer, 0, bytesRead);
 				bytesWritten += bytesRead;
 			}
-
 			return bytesWritten;
 		}
-
 	}
+
 
 	private class ResponseBodyWriteListener implements WriteListener {
 
@@ -234,6 +256,7 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 			}
 		}
 	}
+
 
 	private class ResponseBodyFlushProcessor extends AbstractResponseBodyFlushProcessor {
 
@@ -255,7 +278,6 @@ public class ServletServerHttpResponse extends AbstractListenerServerHttpRespons
 			}
 			ServletServerHttpResponse.this.flush();
 		}
-
 	}
 
 }
