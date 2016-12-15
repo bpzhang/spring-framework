@@ -77,7 +77,7 @@ public class WebClientIntegrationTests {
 							assertEquals(13L, httpHeaders.getContentLength());
 						})
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());
@@ -101,53 +101,11 @@ public class WebClientIntegrationTests {
 		StepVerifier.create(result)
 				.expectNext("Hello Spring!")
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());
 		assertEquals("testvalue", recordedRequest.getHeader("X-Test-Header"));
-		assertEquals("*/*", recordedRequest.getHeader(HttpHeaders.ACCEPT));
-		assertEquals("/greeting?name=Spring", recordedRequest.getPath());
-	}
-
-	@Test
-	public void retrieveMono() throws Exception {
-		HttpUrl baseUrl = server.url("/greeting?name=Spring");
-		this.server.enqueue(new MockResponse().setBody("Hello Spring!"));
-
-		ClientRequest<Void> request = ClientRequest.GET(baseUrl.toString()).build();
-
-		Mono<String> result = this.webClient
-				.retrieveMono(request, String.class);
-
-		StepVerifier.create(result)
-				.expectNext("Hello Spring!")
-				.expectComplete()
-				.verify();
-
-		RecordedRequest recordedRequest = server.takeRequest();
-		assertEquals(1, server.getRequestCount());
-		assertEquals("*/*", recordedRequest.getHeader(HttpHeaders.ACCEPT));
-		assertEquals("/greeting?name=Spring", recordedRequest.getPath());
-	}
-
-	@Test
-	public void retrieveFlux() throws Exception {
-		HttpUrl baseUrl = server.url("/greeting?name=Spring");
-		this.server.enqueue(new MockResponse().setBody("Hello Spring!"));
-
-		ClientRequest<Void> request = ClientRequest.GET(baseUrl.toString()).build();
-
-		Flux<String> result = this.webClient
-				.retrieveFlux(request, String.class);
-
-		StepVerifier.create(result)
-				.expectNext("Hello Spring!")
-				.expectComplete()
-				.verify();
-
-		RecordedRequest recordedRequest = server.takeRequest();
-		assertEquals(1, server.getRequestCount());
 		assertEquals("*/*", recordedRequest.getHeader(HttpHeaders.ACCEPT));
 		assertEquals("/greeting?name=Spring", recordedRequest.getPath());
 	}
@@ -170,7 +128,7 @@ public class WebClientIntegrationTests {
 		StepVerifier.create(result)
 				.expectNext(content)
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());
@@ -195,7 +153,7 @@ public class WebClientIntegrationTests {
 		StepVerifier.create(result)
 				.consumeNextWith(p -> assertEquals("barbar", p.getBar()))
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());
@@ -221,7 +179,7 @@ public class WebClientIntegrationTests {
 				.consumeNextWith(p -> assertThat(p.getBar(), Matchers.is("bar1")))
 				.consumeNextWith(p -> assertThat(p.getBar(), Matchers.is("bar2")))
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());
@@ -249,7 +207,7 @@ public class WebClientIntegrationTests {
 		StepVerifier.create(result)
 				.consumeNextWith(p -> assertEquals("BARBAR", p.getBar()))
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());
@@ -277,7 +235,7 @@ public class WebClientIntegrationTests {
 		StepVerifier.create(result)
 				.expectNext("test")
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());
@@ -310,49 +268,7 @@ public class WebClientIntegrationTests {
 	}
 
 	@Test
-	public void retrieveNotFound() throws Exception {
-		HttpUrl baseUrl = server.url("/greeting?name=Spring");
-		this.server.enqueue(new MockResponse().setResponseCode(404)
-				.setHeader("Content-Type", "text/plain").setBody("Not Found"));
-
-		ClientRequest<Void> request = ClientRequest.GET(baseUrl.toString()).build();
-
-		Mono<String> result = this.webClient
-				.retrieveMono(request, String.class);
-
-		StepVerifier.create(result)
-				.expectError(WebClientException.class)
-				.verify(Duration.ofSeconds(3));
-
-		RecordedRequest recordedRequest = server.takeRequest();
-		assertEquals(1, server.getRequestCount());
-		assertEquals("*/*", recordedRequest.getHeader(HttpHeaders.ACCEPT));
-		assertEquals("/greeting?name=Spring", recordedRequest.getPath());
-	}
-
-	@Test
-	public void retrieveServerError() throws Exception {
-		HttpUrl baseUrl = server.url("/greeting?name=Spring");
-		this.server.enqueue(new MockResponse().setResponseCode(500)
-				.setHeader("Content-Type", "text/plain").setBody("Not Found"));
-
-		ClientRequest<Void> request = ClientRequest.GET(baseUrl.toString()).build();
-
-		Mono<String> result = this.webClient
-				.retrieveMono(request, String.class);
-
-		StepVerifier.create(result)
-				.expectError(WebClientException.class)
-				.verify(Duration.ofSeconds(3));
-
-		RecordedRequest recordedRequest = server.takeRequest();
-		assertEquals(1, server.getRequestCount());
-		assertEquals("*/*", recordedRequest.getHeader(HttpHeaders.ACCEPT));
-		assertEquals("/greeting?name=Spring", recordedRequest.getPath());
-	}
-
-	@Test
-	public void filter() throws Exception {
+	public void buildFilter() throws Exception {
 		HttpUrl baseUrl = server.url("/greeting?name=Spring");
 		this.server.enqueue(new MockResponse().setHeader("Content-Type", "text/plain").setBody("Hello Spring!"));
 
@@ -372,7 +288,36 @@ public class WebClientIntegrationTests {
 		StepVerifier.create(result)
 				.expectNext("Hello Spring!")
 				.expectComplete()
-				.verify();
+				.verify(Duration.ofSeconds(3));
+
+		RecordedRequest recordedRequest = server.takeRequest();
+		assertEquals(1, server.getRequestCount());
+		assertEquals("bar", recordedRequest.getHeader("foo"));
+
+	}
+
+	@Test
+	public void filter() throws Exception {
+		HttpUrl baseUrl = server.url("/greeting?name=Spring");
+		this.server.enqueue(new MockResponse().setHeader("Content-Type", "text/plain").setBody("Hello Spring!"));
+
+		ExchangeFilterFunction filter = (request, next) -> {
+			ClientRequest<?> filteredRequest = ClientRequest.from(request)
+					.header("foo", "bar").build();
+			return next.exchange(filteredRequest);
+		};
+		WebClient client = WebClient.create(new ReactorClientHttpConnector());
+		WebClient filteredClient = client.filter(filter);
+
+		ClientRequest<Void> request = ClientRequest.GET(baseUrl.toString()).build();
+
+		Mono<String> result = filteredClient.exchange(request)
+				.then(response -> response.body(toMono(String.class)));
+
+		StepVerifier.create(result)
+				.expectNext("Hello Spring!")
+				.expectComplete()
+				.verify(Duration.ofSeconds(3));
 
 		RecordedRequest recordedRequest = server.takeRequest();
 		assertEquals(1, server.getRequestCount());

@@ -16,6 +16,10 @@
 
 package org.springframework.web.reactive.function;
 
+import java.util.function.Function;
+
+import reactor.core.publisher.Mono;
+
 import org.springframework.util.Assert;
 import org.springframework.web.reactive.function.support.ServerRequestWrapper;
 
@@ -29,7 +33,7 @@ import org.springframework.web.reactive.function.support.ServerRequestWrapper;
  * @see RouterFunction#filter(HandlerFilterFunction)
  */
 @FunctionalInterface
-public interface HandlerFilterFunction<T, R> {
+public interface HandlerFilterFunction<T extends ServerResponse, R extends ServerResponse> {
 
 	/**
 	 * Apply this filter to the given handler function. The given
@@ -42,7 +46,7 @@ public interface HandlerFilterFunction<T, R> {
 	 * @return the filtered response
 	 * @see ServerRequestWrapper
 	 */
-	ServerResponse<R> filter(ServerRequest request, HandlerFunction<T> next);
+	Mono<R> filter(ServerRequest request, HandlerFunction<T> next);
 
 	/**
 	 * Return a composed filter function that first applies this filter, and then applies the
@@ -69,5 +73,32 @@ public interface HandlerFilterFunction<T, R> {
 		Assert.notNull(handler, "'handler' must not be null");
 		return request -> this.filter(request, handler);
 	}
+
+	/**
+	 * Adapt the given request processor function to a filter function that only operates on the
+	 * {@code ClientRequest}.
+	 * @param requestProcessor the request processor
+	 * @return the filter adaptation of the request processor
+	 */
+	static HandlerFilterFunction<?, ?> ofRequestProcessor(Function<ServerRequest,
+				Mono<ServerRequest>> requestProcessor) {
+
+		Assert.notNull(requestProcessor, "'requestProcessor' must not be null");
+		return (request, next) -> requestProcessor.apply(request).then(next::handle);
+	}
+
+	/**
+	 * Adapt the given response processor function to a filter function that only operates on the
+	 * {@code ClientResponse}.
+	 * @param responseProcessor the response processor
+	 * @return the filter adaptation of the request processor
+	 */
+	static <T extends ServerResponse, R extends ServerResponse> HandlerFilterFunction<T, R> ofResponseProcessor(Function<T,
+			R> responseProcessor) {
+
+		Assert.notNull(responseProcessor, "'responseProcessor' must not be null");
+		return (request, next) -> next.handle(request).map(responseProcessor);
+	}
+
 
 }

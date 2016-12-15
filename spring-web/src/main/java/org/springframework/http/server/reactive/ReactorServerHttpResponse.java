@@ -30,7 +30,6 @@ import reactor.ipc.netty.http.server.HttpServerResponse;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.core.io.buffer.NettyDataBufferFactory;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ZeroCopyHttpOutputMessage;
@@ -70,24 +69,20 @@ public class ReactorServerHttpResponse extends AbstractServerHttpResponse
 	}
 
 	@Override
-	protected Mono<Void> writeWithInternal(Publisher<DataBuffer> publisher) {
+	protected Mono<Void> writeWithInternal(Publisher<? extends DataBuffer> publisher) {
 		Publisher<ByteBuf> body = toByteBufs(publisher);
-		return this.response.send(body);
+		return this.response.send(body).then();
 	}
 
 	@Override
-	protected Mono<Void> writeAndFlushWithInternal(Publisher<Publisher<DataBuffer>> publisher) {
+	protected Mono<Void> writeAndFlushWithInternal(Publisher<? extends Publisher<? extends DataBuffer>> publisher) {
 		Publisher<Publisher<ByteBuf>> body = Flux.from(publisher)
 				.map(ReactorServerHttpResponse::toByteBufs);
-		return this.response.sendGroups(body);
+		return this.response.sendGroups(body).then();
 	}
 
 	@Override
 	protected void applyHeaders() {
-		// TODO: temporarily, see https://github.com/reactor/reactor-netty/issues/2
-		if(getHeaders().containsKey(HttpHeaders.CONTENT_LENGTH)){
-			this.response.disableChunkedTransfer();
-		}
 		for (String name : getHeaders().keySet()) {
 			for (String value : getHeaders().get(name)) {
 				this.response.responseHeaders().add(name, value);
@@ -114,10 +109,10 @@ public class ReactorServerHttpResponse extends AbstractServerHttpResponse
 
 	@Override
 	public Mono<Void> writeWith(File file, long position, long count) {
-		return doCommit(() -> this.response.sendFile(file, position, count));
+		return doCommit(() -> this.response.sendFile(file.toPath(), position, count).then());
 	}
 
-	private static Publisher<ByteBuf> toByteBufs(Publisher<DataBuffer> dataBuffers) {
+	private static Publisher<ByteBuf> toByteBufs(Publisher<? extends DataBuffer> dataBuffers) {
 		return Flux.from(dataBuffers).map(NettyDataBufferFactory::toByteBuf);
 	}
 

@@ -63,8 +63,7 @@ public abstract class AbstractNamedValueMethodArgumentResolver implements Handle
 
 	private final BeanExpressionContext expressionContext;
 
-	private final Map<MethodParameter, NamedValueInfo> namedValueInfoCache =
-			new ConcurrentHashMap<>(256);
+	private final Map<MethodParameter, NamedValueInfo> namedValueInfoCache = new ConcurrentHashMap<>(256);
 
 
 	/**
@@ -108,8 +107,7 @@ public abstract class AbstractNamedValueMethodArgumentResolver implements Handle
 		}
 
 		if (!ClassUtils.isAssignableValue(parameter.getParameterType(), arg)) {
-			arg = this.conversionService.convert(
-					arg, TypeDescriptor.valueOf(arg.getClass()), new TypeDescriptor(parameter));
+			arg = this.conversionService.convert(arg, TypeDescriptor.forObject(arg), new TypeDescriptor(parameter));
 		}
 
 		handleResolvedValue(arg, namedValueInfo.name, parameter, message);

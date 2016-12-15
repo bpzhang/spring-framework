@@ -21,10 +21,13 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -55,12 +58,12 @@ import org.springframework.web.server.ServerWebExchange;
  */
 class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 
-	private final int statusCode;
+	private final HttpStatus statusCode;
 
 	private final HttpHeaders headers = new HttpHeaders();
 
 
-	public DefaultServerResponseBuilder(int statusCode) {
+	public DefaultServerResponseBuilder(HttpStatus statusCode) {
 		this.statusCode = statusCode;
 	}
 
@@ -84,6 +87,12 @@ class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 	@Override
 	public ServerResponse.BodyBuilder allow(HttpMethod... allowedMethods) {
 		this.headers.setAllow(new LinkedHashSet<>(Arrays.asList(allowedMethods)));
+		return this;
+	}
+
+	@Override
+	public ServerResponse.BodyBuilder allow(Set<HttpMethod> allowedMethods) {
+		this.headers.setAllow(allowedMethods);
 		return this;
 	}
 
@@ -143,45 +152,54 @@ class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 	}
 
 	@Override
-	public ServerResponse<Void> build() {
-		return body(BodyInserter.of(
-				(response, context) -> response.setComplete(),
-				() -> null));
+	public Mono<ServerResponse> build() {
+		return build((exchange, handlerStrategies) -> exchange.getResponse().setComplete());
 	}
 
 	@Override
-	public <T extends Publisher<Void>> ServerResponse<T> build(T voidPublisher) {
+	public Mono<ServerResponse> build(Publisher<Void> voidPublisher) {
 		Assert.notNull(voidPublisher, "'voidPublisher' must not be null");
-		return body(BodyInserter.of(
-				(response, context) -> Flux.from(voidPublisher).thenEmpty(response.setComplete()),
-				() -> null));
+		return build((exchange, handlerStrategies) ->
+				Mono.from(voidPublisher).then(exchange.getResponse().setComplete()));
 	}
 
 	@Override
-	public <T> ServerResponse<T> body(BodyInserter<T, ? super ServerHttpResponse> inserter) {
-		Assert.notNull(inserter, "'inserter' must not be null");
-		return new BodyInserterServerResponse<T>(this.statusCode, this.headers, inserter);
+	public Mono<ServerResponse> build(
+			BiFunction<ServerWebExchange, HandlerStrategies, Mono<Void>> writeFunction) {
+
+		Assert.notNull(writeFunction, "'writeFunction' must not be null");
+		return Mono.just(new WriterFunctionServerResponse(this.statusCode, this.headers,
+				writeFunction));
 	}
 
 	@Override
-	public <S extends Publisher<T>, T> ServerResponse<S> body(S publisher, Class<T> elementClass) {
+	public <T, P extends Publisher<T>> Mono<ServerResponse> body(P publisher,
+			Class<T> elementClass) {
 		return body(BodyInserters.fromPublisher(publisher, elementClass));
 	}
 
 	@Override
-	public ServerResponse<Rendering> render(String name, Object... modelAttributes) {
+	public <T> Mono<ServerResponse> body(BodyInserter<T, ? super ServerHttpResponse> inserter) {
+		Assert.notNull(inserter, "'inserter' must not be null");
+		return Mono
+				.just(new BodyInserterServerResponse<T>(this.statusCode, this.headers, inserter));
+	}
+
+	@Override
+	public Mono<ServerResponse> render(String name, Object... modelAttributes) {
 		Assert.hasLength(name, "'name' must not be empty");
 		return render(name, toModelMap(modelAttributes));
 	}
 
 	@Override
-	public ServerResponse<Rendering> render(String name, Map<String, ?> model) {
+	public Mono<ServerResponse> render(String name, Map<String, ?> model) {
 		Assert.hasLength(name, "'name' must not be empty");
 		Map<String, Object> modelMap = new LinkedHashMap<>();
 		if (model != null) {
 			modelMap.putAll(model);
 		}
-		return new RenderingServerResponse(this.statusCode, this.headers, name, modelMap);
+		return Mono
+				.just(new RenderingServerResponse(this.statusCode, this.headers, name, modelMap));
 	}
 
 	private Map<String, Object> toModelMap(Object[] modelAttributes) {
@@ -194,20 +212,26 @@ class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 	}
 
 
-	private static abstract class AbstractServerResponse<T> implements ServerResponse<T> {
+	private static abstract class AbstractServerResponse implements ServerResponse {
 
-		private final int statusCode;
+		private final HttpStatus statusCode;
 
 		private final HttpHeaders headers;
 
-		protected AbstractServerResponse(int statusCode, HttpHeaders headers) {
+		protected AbstractServerResponse(HttpStatus statusCode, HttpHeaders headers) {
 			this.statusCode = statusCode;
-			this.headers = HttpHeaders.readOnlyHttpHeaders(headers);
+			this.headers = readOnlyCopy(headers);
+		}
+
+		private static HttpHeaders readOnlyCopy(HttpHeaders headers) {
+			HttpHeaders copy = new HttpHeaders();
+			copy.putAll(headers);
+			return HttpHeaders.readOnlyHttpHeaders(copy);
 		}
 
 		@Override
 		public final HttpStatus statusCode() {
-			return HttpStatus.valueOf(this.statusCode);
+			return this.statusCode;
 		}
 
 		@Override
@@ -216,7 +240,7 @@ class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 		}
 
 		protected void writeStatusAndHeaders(ServerHttpResponse response) {
-			response.setStatusCode(HttpStatus.valueOf(this.statusCode));
+			response.setStatusCode(this.statusCode);
 			HttpHeaders responseHeaders = response.getHeaders();
 
 			if (!this.headers.isEmpty()) {
@@ -228,21 +252,35 @@ class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 		}
 	}
 
+	private static final class WriterFunctionServerResponse extends AbstractServerResponse {
 
-	private static final class BodyInserterServerResponse<T> extends AbstractServerResponse<T> {
+		private final BiFunction<ServerWebExchange, HandlerStrategies, Mono<Void>> writeFunction;
+
+		public WriterFunctionServerResponse(HttpStatus statusCode,
+				HttpHeaders headers,
+				BiFunction<ServerWebExchange, HandlerStrategies, Mono<Void>> writeFunction) {
+			super(statusCode, headers);
+			this.writeFunction = writeFunction;
+		}
+
+		@Override
+		public Mono<Void> writeTo(ServerWebExchange exchange, HandlerStrategies strategies) {
+			writeStatusAndHeaders(exchange.getResponse());
+			return this.writeFunction.apply(exchange, strategies);
+		}
+	}
+
+
+
+	private static final class BodyInserterServerResponse<T> extends AbstractServerResponse {
 
 		private final BodyInserter<T, ? super ServerHttpResponse> inserter;
 
-		public BodyInserterServerResponse(int statusCode, HttpHeaders headers,
+		public BodyInserterServerResponse(HttpStatus statusCode, HttpHeaders headers,
 				BodyInserter<T, ? super ServerHttpResponse> inserter) {
 
 			super(statusCode, headers);
 			this.inserter = inserter;
-		}
-
-		@Override
-		public T body() {
-			return this.inserter.t();
 		}
 
 		@Override
@@ -259,24 +297,19 @@ class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 	}
 
 
-	private static final class RenderingServerResponse extends AbstractServerResponse<Rendering> {
+	private static final class RenderingServerResponse extends AbstractServerResponse {
 
 		private final String name;
 
 		private final Map<String, Object> model;
 
-		private final Rendering rendering;
 
-		public RenderingServerResponse(int statusCode, HttpHeaders headers, String name, Map<String, Object> model) {
+		public RenderingServerResponse(HttpStatus statusCode, HttpHeaders headers, String name,
+				Map<String, Object> model) {
+
 			super(statusCode, headers);
 			this.name = name;
-			this.model = model;
-			this.rendering = new DefaultRendering();
-		}
-
-		@Override
-		public Rendering body() {
-			return this.rendering;
+			this.model = Collections.unmodifiableMap(model);
 		}
 
 		@Override
@@ -294,18 +327,6 @@ class DefaultServerResponseBuilder implements ServerResponse.BodyBuilder {
 					.then(view -> view.render(this.model, contentType, exchange));
 		}
 
-		private class DefaultRendering implements Rendering {
-
-			@Override
-			public String name() {
-				return name;
-			}
-
-			@Override
-			public Map<String, Object> model() {
-				return model;
-			}
-		}
 	}
 
 }

@@ -18,7 +18,6 @@ package org.springframework.http.codec;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.function.BiFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -48,6 +47,19 @@ public abstract class BodyInserters {
 	private static final ResolvableType SERVER_SIDE_EVENT_TYPE =
 			ResolvableType.forClass(ServerSentEvent.class);
 
+	private static final BodyInserter<Void, ReactiveHttpOutputMessage> EMPTY =
+					(response, context) -> response.setComplete();
+
+
+	/**
+	 * Return an empty {@code BodyInserter} that writes nothing.
+	 * @return an empty {@code BodyInserter}
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T> BodyInserter<T, ReactiveHttpOutputMessage> empty() {
+		return (BodyInserter<T, ReactiveHttpOutputMessage>)EMPTY;
+	}
+
 	/**
 	 * Return a {@code BodyInserter} that writes the given single object.
 	 * @param body the body of the response
@@ -55,9 +67,7 @@ public abstract class BodyInserters {
 	 */
 	public static <T> BodyInserter<T, ReactiveHttpOutputMessage> fromObject(T body) {
 		Assert.notNull(body, "'body' must not be null");
-		return BodyInserter.of(
-				writeFunctionFor(Mono.just(body), ResolvableType.forInstance(body)),
-				() -> body);
+		return bodyInserterFor(Mono.just(body), ResolvableType.forInstance(body));
 	}
 
 	/**
@@ -65,18 +75,15 @@ public abstract class BodyInserters {
 	 * @param publisher the publisher to stream to the response body
 	 * @param elementClass the class of elements contained in the publisher
 	 * @param <T> the type of the elements contained in the publisher
-	 * @param <S> the type of the {@code Publisher}
+	 * @param <P> the type of the {@code Publisher}
 	 * @return a {@code BodyInserter} that writes a {@code Publisher}
 	 */
-	public static <S extends Publisher<T>, T> BodyInserter<S, ReactiveHttpOutputMessage> fromPublisher(S publisher,
+	public static <T, P extends Publisher<T>> BodyInserter<P, ReactiveHttpOutputMessage> fromPublisher(P publisher,
 			Class<T> elementClass) {
 
 		Assert.notNull(publisher, "'publisher' must not be null");
 		Assert.notNull(elementClass, "'elementClass' must not be null");
-		return BodyInserter.of(
-				writeFunctionFor(publisher, ResolvableType.forClass(elementClass)),
-				() -> publisher
-		);
+		return bodyInserterFor(publisher, ResolvableType.forClass(elementClass));
 	}
 
 	/**
@@ -84,18 +91,15 @@ public abstract class BodyInserters {
 	 * @param publisher the publisher to stream to the response body
 	 * @param elementType the type of elements contained in the publisher
 	 * @param <T> the type of the elements contained in the publisher
-	 * @param <S> the type of the {@code Publisher}
+	 * @param <P> the type of the {@code Publisher}
 	 * @return a {@code BodyInserter} that writes a {@code Publisher}
 	 */
-	public static <S extends Publisher<T>, T> BodyInserter<S, ReactiveHttpOutputMessage> fromPublisher(S publisher,
+	public static <T, P extends Publisher<T>> BodyInserter<P, ReactiveHttpOutputMessage> fromPublisher(P publisher,
 			ResolvableType elementType) {
 
 		Assert.notNull(publisher, "'publisher' must not be null");
 		Assert.notNull(elementType, "'elementType' must not be null");
-		return BodyInserter.of(
-				writeFunctionFor(publisher, elementType),
-				() -> publisher
-		);
+		return bodyInserterFor(publisher, elementType);
 	}
 
 	/**
@@ -109,14 +113,11 @@ public abstract class BodyInserters {
 	 */
 	public static <T extends Resource> BodyInserter<T, ReactiveHttpOutputMessage> fromResource(T resource) {
 		Assert.notNull(resource, "'resource' must not be null");
-		return BodyInserter.of(
-				(response, context) -> {
+		return (response, context) -> {
 					HttpMessageWriter<Resource> messageWriter = resourceHttpMessageWriter(context);
 					return messageWriter.write(Mono.just(resource), RESOURCE_TYPE, null,
 							response, Collections.emptyMap());
-				},
-				() -> resource
-		);
+				};
 	}
 
 	private static HttpMessageWriter<Resource> resourceHttpMessageWriter(BodyInserter.Context context) {
@@ -139,14 +140,11 @@ public abstract class BodyInserters {
 			S eventsPublisher) {
 
 		Assert.notNull(eventsPublisher, "'eventsPublisher' must not be null");
-		return BodyInserter.of(
-				(response, context) -> {
+		return (response, context) -> {
 					HttpMessageWriter<ServerSentEvent<T>> messageWriter = sseMessageWriter(context);
 					return messageWriter.write(eventsPublisher, SERVER_SIDE_EVENT_TYPE,
 							MediaType.TEXT_EVENT_STREAM, response, Collections.emptyMap());
-				},
-				() -> eventsPublisher
-		);
+				};
 	}
 
 	/**
@@ -182,15 +180,12 @@ public abstract class BodyInserters {
 
 		Assert.notNull(eventsPublisher, "'eventsPublisher' must not be null");
 		Assert.notNull(eventType, "'eventType' must not be null");
-		return BodyInserter.of(
-				(outputMessage, context) -> {
+		return (outputMessage, context) -> {
 					HttpMessageWriter<T> messageWriter = sseMessageWriter(context);
 					return messageWriter.write(eventsPublisher, eventType,
 							MediaType.TEXT_EVENT_STREAM, outputMessage, Collections.emptyMap());
 
-				},
-				() -> eventsPublisher
-		);
+				};
 	}
 
 	/**
@@ -204,10 +199,7 @@ public abstract class BodyInserters {
 	public static <T extends Publisher<DataBuffer>> BodyInserter<T, ReactiveHttpOutputMessage> fromDataBuffers(T publisher) {
 		Assert.notNull(publisher, "'publisher' must not be null");
 
-		return BodyInserter.of(
-				(outputMessage, context) -> outputMessage.writeWith(publisher),
-				() -> publisher
-		);
+		return (outputMessage, context) -> outputMessage.writeWith(publisher);
 	}
 
 	private static <T> HttpMessageWriter<T> sseMessageWriter(BodyInserter.Context context) {
@@ -221,8 +213,7 @@ public abstract class BodyInserters {
 								MediaType.TEXT_EVENT_STREAM_VALUE));
 	}
 
-	private static <T, M extends ReactiveHttpOutputMessage> BiFunction<M, BodyInserter.Context, Mono<Void>>
-		writeFunctionFor(Publisher<T> body, ResolvableType bodyType) {
+	private static <T, P extends Publisher<?>, M extends ReactiveHttpOutputMessage> BodyInserter<T, M> bodyInserterFor(P body, ResolvableType bodyType) {
 
 		return (m, context) -> {
 
@@ -249,32 +240,6 @@ public abstract class BodyInserters {
 	@SuppressWarnings("unchecked")
 	private static <T> HttpMessageWriter<T> cast(HttpMessageWriter<?> messageWriter) {
 		return (HttpMessageWriter<T>) messageWriter;
-	}
-
-	static class DefaultBodyInserter<T, M extends ReactiveHttpOutputMessage>
-			implements BodyInserter<T, M> {
-
-		private final BiFunction<M, Context, Mono<Void>> writer;
-
-		private final Supplier<T> supplier;
-
-		public DefaultBodyInserter(
-				BiFunction<M, Context, Mono<Void>> writer,
-				Supplier<T> supplier) {
-			this.writer = writer;
-			this.supplier = supplier;
-		}
-
-		@Override
-		public Mono<Void> insert(M outputMessage, Context context) {
-			return this.writer.apply(outputMessage, context);
-		}
-
-		@Override
-		public T t() {
-			return this.supplier.get();
-		}
-
 	}
 
 

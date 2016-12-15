@@ -20,7 +20,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.reactivex.netty.protocol.http.client.HttpClient;
@@ -39,7 +38,7 @@ import org.springframework.web.reactive.socket.WebSocketSession;
 import static org.junit.Assert.assertEquals;
 
 /**
- * Basic WebSocket integration
+ * Basic WebSocket integration tests.
  * @author Rossen Stoyanchev
  */
 @SuppressWarnings({"unused", "WeakerAccess"})
@@ -61,13 +60,16 @@ public class BasicWebSocketHandlerIntegrationTests extends AbstractWebSocketHand
 				.flatMap(WebSocketResponse::getWebSocketConnection)
 				.flatMap(conn -> conn.write(messages
 						.map(TextWebSocketFrame::new)
-						.cast(WebSocketFrame.class)
-						.concatWith(Observable.just(new CloseWebSocketFrame())))
+						.cast(WebSocketFrame.class))
 						.cast(WebSocketFrame.class)
 						.mergeWith(conn.getInput())
 				)
 				.take(10)
-				.map(frame -> frame.content().toString(StandardCharsets.UTF_8))
+				.map(frame -> {
+					String text = frame.content().toString(StandardCharsets.UTF_8);
+					frame.release();
+					return text;
+				})
 				.toList().toBlocking().first();
 		List<String> expected = messages.toList().toBlocking().first();
 		assertEquals(expected, actual);
