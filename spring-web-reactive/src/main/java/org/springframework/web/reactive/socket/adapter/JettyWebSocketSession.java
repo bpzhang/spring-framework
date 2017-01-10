@@ -23,24 +23,34 @@ import java.nio.charset.StandardCharsets;
 import org.eclipse.jetty.websocket.api.Session;
 import org.eclipse.jetty.websocket.api.WriteCallback;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoProcessor;
 
+import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.util.ObjectUtils;
 import org.springframework.web.reactive.socket.CloseStatus;
+import org.springframework.web.reactive.socket.HandshakeInfo;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketSession;
 
 /**
- * Spring {@link WebSocketSession} adapter for Jetty's
- * {@link org.eclipse.jetty.websocket.api.Session}.
+ * Spring {@link WebSocketSession} implementation that adapts to a Jetty
+ * WebSocket {@link org.eclipse.jetty.websocket.api.Session}.
  * 
  * @author Violeta Georgieva
+ * @author Rossen Stoyanchev
  * @since 5.0
  */
 public class JettyWebSocketSession extends AbstractListenerWebSocketSession<Session> {
 
-	public JettyWebSocketSession(Session session) {
-		super(session, ObjectUtils.getIdentityHexString(session),
-				session.getUpgradeRequest().getRequestURI());
+
+	public JettyWebSocketSession(Session session, HandshakeInfo info, DataBufferFactory factory) {
+		this(session, info, factory, null);
+	}
+
+	public JettyWebSocketSession(Session session, HandshakeInfo info, DataBufferFactory factory,
+			MonoProcessor<Void> completionMono) {
+
+		super(session, ObjectUtils.getIdentityHexString(session), info, factory, completionMono);
 	}
 
 
@@ -84,7 +94,7 @@ public class JettyWebSocketSession extends AbstractListenerWebSocketSession<Sess
 	}
 
 	@Override
-	protected Mono<Void> closeInternal(CloseStatus status) {
+	public Mono<Void> close(CloseStatus status) {
 		getDelegate().close(status.getCode(), status.getReason());
 		return Mono.empty();
 	}

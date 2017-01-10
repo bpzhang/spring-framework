@@ -19,14 +19,13 @@ package org.springframework.web.socket.server.jetty;
 import java.io.IOException;
 import java.security.Principal;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import javax.servlet.ServletContext;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
-import org.eclipse.jetty.util.DecoratedObjectFactory;
 import org.eclipse.jetty.websocket.api.WebSocketPolicy;
 import org.eclipse.jetty.websocket.api.extensions.ExtensionConfig;
 import org.eclipse.jetty.websocket.server.HandshakeRFC6455;
@@ -162,8 +161,9 @@ public class JettyRequestUpgradeStrategy implements RequestUpgradeStrategy, Serv
 	}
 
 	private List<WebSocketExtension> buildWebSocketExtensions() {
-		List<WebSocketExtension> result = new ArrayList<>();
-		for (String name : this.factoryAdapter.getFactory().getExtensionFactory().getExtensionNames()) {
+		Set<String> names = this.factoryAdapter.getFactory().getExtensionFactory().getExtensionNames();
+		List<WebSocketExtension> result = new ArrayList<>(names.size());
+		for (String name : names) {
 			result.add(new WebSocketExtension(name));
 		}
 		return result;
@@ -217,10 +217,10 @@ public class JettyRequestUpgradeStrategy implements RequestUpgradeStrategy, Serv
 			this.handler = handler;
 			this.selectedProtocol = protocol;
 			if (CollectionUtils.isEmpty(extensions)) {
-				this.extensionConfigs = new LinkedList<>();
+				this.extensionConfigs = new ArrayList<>(0);
 			}
 			else {
-				this.extensionConfigs = new ArrayList<>();
+				this.extensionConfigs = new ArrayList<>(extensions.size());
 				for (WebSocketExtension extension : extensions) {
 					this.extensionConfigs.add(new WebSocketToJettyExtensionConfigAdapter(extension));
 				}
@@ -295,7 +295,6 @@ public class JettyRequestUpgradeStrategy implements RequestUpgradeStrategy, Serv
 
 		@Override
 		protected WebSocketServerFactory createFactory(WebSocketPolicy policy) throws Exception {
-			servletContext.setAttribute(DecoratedObjectFactory.ATTR, new DecoratedObjectFactory());
 			return new WebSocketServerFactory(servletContext, policy);
 		}
 

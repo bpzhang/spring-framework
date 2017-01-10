@@ -17,29 +17,38 @@
 package org.springframework.web.reactive.socket.adapter;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.reactivestreams.Publisher;
+import org.reactivestreams.Subscriber;
+import org.reactivestreams.Subscription;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.MonoProcessor;
 
+import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.http.server.reactive.AbstractListenerReadPublisher;
 import org.springframework.http.server.reactive.AbstractListenerWriteProcessor;
-import org.springframework.util.Assert;
 import org.springframework.web.reactive.socket.CloseStatus;
+import org.springframework.web.reactive.socket.HandshakeInfo;
 import org.springframework.web.reactive.socket.WebSocketMessage;
 import org.springframework.web.reactive.socket.WebSocketMessage.Type;
 import org.springframework.web.reactive.socket.WebSocketSession;
 
 /**
- * Base class for Listener-based {@link WebSocketSession} adapters.
+ * Base class for {@link WebSocketSession} implementations that bridge between
+ * event-listener WebSocket APIs (e.g. Java WebSocket API JSR-356, Jetty,
+ * Undertow) and Reactive Streams.
+ *
+ * <p>Also an implementation of {@link Subscriber<Void>} so it can be used as
+ * the completion subscriber for session handling
  *
  * @author Violeta Georgieva
  * @author Rossen Stoyanchev
  * @since 5.0
  */
-public abstract class AbstractListenerWebSocketSession<T> extends WebSocketSessionSupport<T> {
+public abstract class AbstractListenerWebSocketSession<T> extends AbstractWebSocketSession<T>
+		implements Subscriber<Void> {
 
 	/**
 	 * The "back-pressure" buffer size to use if the underlying WebSocket API
@@ -48,9 +57,7 @@ public abstract class AbstractListenerWebSocketSession<T> extends WebSocketSessi
 	private static final int RECEIVE_BUFFER_SIZE = 8192;
 
 
-	private final String id;
-
-	private final URI uri;
+	private final MonoProcessor<Void> completionMono;
 
 	private final WebSocketReceivePublisher receivePublisher = new WebSocketReceivePublisher();
 
@@ -59,24 +66,30 @@ public abstract class AbstractListenerWebSocketSession<T> extends WebSocketSessi
 	private final AtomicBoolean sendCalled = new AtomicBoolean();
 
 
-	public AbstractListenerWebSocketSession(T delegate, String id, URI uri) {
-		super(delegate);
-		Assert.notNull(id, "'id' is required.");
-		Assert.notNull(uri, "'uri' is required.");
-		this.id = id;
-		this.uri = uri;
+	/**
+	 * Base constructor.
+ 	 * @param delegate the native WebSocket session, channel, or connection
+	 * @param id the session id
+	 * @param handshakeInfo the handshake info
+	 * @param bufferFactory the DataBuffer factor for the current connection
+	 */
+	public AbstractListenerWebSocketSession(T delegate, String id, HandshakeInfo handshakeInfo,
+			DataBufferFactory bufferFactory) {
+
+		this(delegate, id, handshakeInfo, bufferFactory, null);
 	}
 
+	/**
+	 * Alternative constructor with completion {@link Mono<Void>} to propagate
+	 * the session completion (success or error) (for client-side use).
+	 */
+	public AbstractListenerWebSocketSession(T delegate, String id, HandshakeInfo handshakeInfo,
+			DataBufferFactory bufferFactory, MonoProcessor<Void> completionMono) {
 
-	@Override
-	public String getId() {
-		return this.id;
+		super(delegate, id, handshakeInfo, bufferFactory);
+		this.completionMono = completionMono;
 	}
 
-	@Override
-	public URI getUri() {
-		return this.uri;
-	}
 
 	protected WebSocketSendProcessor getSendProcessor() {
 		return this.sendProcessor;
@@ -156,6 +169,36 @@ public abstract class AbstractListenerWebSocketSession<T> extends WebSocketSessi
 			this.sendProcessor.cancel();
 			this.sendProcessor.onComplete();
 		}
+	}
+
+
+	// Subscriber<Void> implementation
+
+	@Override
+	public void onSubscribe(Subscription subscription) {
+		subscription.request(Long.MAX_VALUE);
+	}
+
+	@Override
+	public void onNext(Void aVoid) {
+		// no op
+	}
+
+	@Override
+	public void onError(Throwable ex) {
+		if (this.completionMono != null) {
+			this.completionMono.onError(ex);
+		}
+		int code = CloseStatus.SERVER_ERROR.getCode();
+		close(new CloseStatus(code, ex.getMessage()));
+	}
+
+	@Override
+	public void onComplete() {
+		if (this.completionMono != null) {
+			this.completionMono.onComplete();
+		}
+		close();
 	}
 
 

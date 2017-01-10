@@ -17,28 +17,30 @@
 package org.springframework.web.reactive.socket.server.upgrade;
 
 import java.io.IOException;
+import java.security.Principal;
 import java.util.Collections;
-import java.util.Map;
-
+import java.util.Optional;
 import javax.servlet.ServletContext;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.websocket.Endpoint;
-import javax.websocket.server.ServerEndpointConfig;
 
 import org.apache.tomcat.websocket.server.WsServerContainer;
+import reactor.core.publisher.Mono;
+
+import org.springframework.core.io.buffer.DataBufferFactory;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.http.server.reactive.ServletServerHttpRequest;
 import org.springframework.http.server.reactive.ServletServerHttpResponse;
 import org.springframework.util.Assert;
 import org.springframework.web.reactive.socket.WebSocketHandler;
-import org.springframework.web.reactive.socket.adapter.TomcatWebSocketHandlerAdapter;
+import org.springframework.web.reactive.socket.HandshakeInfo;
+import org.springframework.web.reactive.socket.adapter.StandardWebSocketHandlerAdapter;
+import org.springframework.web.reactive.socket.adapter.StandardWebSocketSession;
 import org.springframework.web.reactive.socket.server.RequestUpgradeStrategy;
 import org.springframework.web.server.ServerWebExchange;
-
-import reactor.core.publisher.Mono;
 
 /**
  * A {@link RequestUpgradeStrategy} for use with Tomcat.
@@ -46,23 +48,33 @@ import reactor.core.publisher.Mono;
  * @author Violeta Georgieva
  * @since 5.0
  */
+@SuppressWarnings("OptionalUsedAsFieldOrParameterType")
 public class TomcatRequestUpgradeStrategy implements RequestUpgradeStrategy {
 
 	private static final String SERVER_CONTAINER_ATTR = "javax.websocket.server.ServerContainer";
 
 
 	@Override
-	public Mono<Void> upgrade(ServerWebExchange exchange, WebSocketHandler handler){
+	public Mono<Void> upgrade(ServerWebExchange exchange, WebSocketHandler handler,
+			Optional<String> subProtocol){
 
 		ServerHttpRequest request = exchange.getRequest();
 		ServerHttpResponse response = exchange.getResponse();
-		Endpoint endpoint = new TomcatWebSocketHandlerAdapter(request, response, handler).getEndpoint();
 
 		HttpServletRequest servletRequest = getHttpServletRequest(request);
 		HttpServletResponse servletResponse = getHttpServletResponse(response);
 
+		Endpoint endpoint = new StandardWebSocketHandlerAdapter(handler,
+				session -> {
+					HandshakeInfo info = getHandshakeInfo(exchange, subProtocol);
+					DataBufferFactory factory = response.bufferFactory();
+					return new StandardWebSocketSession(session, info, factory);
+				});
+
 		String requestURI = servletRequest.getRequestURI();
-		ServerEndpointConfig config = new ServerEndpointRegistration(requestURI, endpoint);
+		DefaultServerEndpointConfig config = new DefaultServerEndpointConfig(requestURI, endpoint);
+		config.setSubprotocols(subProtocol.map(Collections::singletonList).orElse(Collections.emptyList()));
+
 		try {
 			WsServerContainer container = getContainer(servletRequest);
 			container.doUpgrade(servletRequest, servletResponse, config, Collections.emptyMap());
@@ -82,6 +94,12 @@ public class TomcatRequestUpgradeStrategy implements RequestUpgradeStrategy {
 	private HttpServletResponse getHttpServletResponse(ServerHttpResponse response) {
 		Assert.isTrue(response instanceof ServletServerHttpResponse);
 		return ((ServletServerHttpResponse) response).getServletResponse();
+	}
+
+	private HandshakeInfo getHandshakeInfo(ServerWebExchange exchange, Optional<String> protocol) {
+		ServerHttpRequest request = exchange.getRequest();
+		Mono<Principal> principal = exchange.getPrincipal();
+		return new HandshakeInfo(request.getURI(), request.getHeaders(), principal, protocol);
 	}
 
 	private WsServerContainer getContainer(HttpServletRequest request) {
