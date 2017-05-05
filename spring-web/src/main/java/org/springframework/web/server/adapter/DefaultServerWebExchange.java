@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.InvalidMediaTypeException;
 import org.springframework.http.MediaType;
-import org.springframework.http.codec.FormHttpMessageReader;
+import org.springframework.http.codec.HttpMessageReader;
+import org.springframework.http.codec.ServerCodecConfigurer;
+import org.springframework.http.codec.multipart.Part;
 import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.util.Assert;
@@ -56,13 +58,18 @@ public class DefaultServerWebExchange implements ServerWebExchange {
 
 	private static final List<HttpMethod> SAFE_METHODS = Arrays.asList(HttpMethod.GET, HttpMethod.HEAD);
 
-	private static final FormHttpMessageReader FORM_READER = new FormHttpMessageReader();
-
-	private static final ResolvableType FORM_DATA_VALUE_TYPE =
+	private static final ResolvableType FORM_DATA_TYPE =
 			ResolvableType.forClassWithGenerics(MultiValueMap.class, String.class, String.class);
+
+	private static final ResolvableType MULTIPART_DATA_TYPE = ResolvableType.forClassWithGenerics(
+			MultiValueMap.class, String.class, Part.class);
 
 	private static final Mono<MultiValueMap<String, String>> EMPTY_FORM_DATA =
 			Mono.just(CollectionUtils.unmodifiableMultiValueMap(new LinkedMultiValueMap<String, String>(0)))
+					.cache();
+
+	private static final Mono<MultiValueMap<String, Part>> EMPTY_MULTIPART_DATA =
+			Mono.just(CollectionUtils.unmodifiableMultiValueMap(new LinkedMultiValueMap<String, Part>(0)))
 					.cache();
 
 
@@ -76,33 +83,43 @@ public class DefaultServerWebExchange implements ServerWebExchange {
 
 	private final Mono<MultiValueMap<String, String>> formDataMono;
 
-	private final Mono<MultiValueMap<String, String>> requestParamsMono;
+	private final Mono<MultiValueMap<String, Part>> multipartDataMono;
 
 	private volatile boolean notModified;
 
 
+	/**
+	 * Alternate constructor with a WebSessionManager parameter.
+	 */
 	public DefaultServerWebExchange(ServerHttpRequest request, ServerHttpResponse response,
-			WebSessionManager sessionManager) {
+			WebSessionManager sessionManager, ServerCodecConfigurer codecConfigurer) {
 
 		Assert.notNull(request, "'request' is required");
 		Assert.notNull(response, "'response' is required");
-		Assert.notNull(response, "'sessionManager' is required");
-		Assert.notNull(response, "'formReader' is required");
+		Assert.notNull(sessionManager, "'sessionManager' is required");
+		Assert.notNull(codecConfigurer, "'codecConfigurer' is required");
 
 		this.request = request;
 		this.response = response;
 		this.sessionMono = sessionManager.getSession(this).cache();
-		this.formDataMono = initFormData(request);
-		this.requestParamsMono = initRequestParams(request, this.formDataMono);
+		this.formDataMono = initFormData(request, codecConfigurer);
+		this.multipartDataMono = initMultipartData(request, codecConfigurer);
 	}
 
-	private static Mono<MultiValueMap<String, String>> initFormData(ServerHttpRequest request) {
-		MediaType contentType;
+	@SuppressWarnings("unchecked")
+	private static Mono<MultiValueMap<String, String>> initFormData(ServerHttpRequest request,
+			ServerCodecConfigurer configurer) {
+
 		try {
-			contentType = request.getHeaders().getContentType();
+			MediaType contentType = request.getHeaders().getContentType();
 			if (MediaType.APPLICATION_FORM_URLENCODED.isCompatibleWith(contentType)) {
-				Map<String, Object> hints = Collections.emptyMap();
-				return FORM_READER.readMono(FORM_DATA_VALUE_TYPE, request, hints).cache();
+				return ((HttpMessageReader<MultiValueMap<String, String>>) configurer.getReaders().stream()
+						.filter(reader -> reader.canRead(FORM_DATA_TYPE, MediaType.APPLICATION_FORM_URLENCODED))
+						.findFirst()
+						.orElseThrow(() -> new IllegalStateException("No form data HttpMessageReader.")))
+						.readMono(FORM_DATA_TYPE, request, Collections.emptyMap())
+						.switchIfEmpty(EMPTY_FORM_DATA)
+						.cache();
 			}
 		}
 		catch (InvalidMediaTypeException ex) {
@@ -111,18 +128,26 @@ public class DefaultServerWebExchange implements ServerWebExchange {
 		return EMPTY_FORM_DATA;
 	}
 
-	private static Mono<MultiValueMap<String, String>> initRequestParams(
-			ServerHttpRequest request, Mono<MultiValueMap<String, String>> formDataMono) {
+	@SuppressWarnings("unchecked")
+	private static Mono<MultiValueMap<String, Part>> initMultipartData(ServerHttpRequest request,
+			ServerCodecConfigurer configurer) {
 
-		return formDataMono
-				.map(formData -> {
-					MultiValueMap<String, String> result = new LinkedMultiValueMap<>();
-					result.putAll(request.getQueryParams());
-					result.putAll(formData);
-					return CollectionUtils.unmodifiableMultiValueMap(result);
-				})
-				.defaultIfEmpty(request.getQueryParams())
-				.cache();
+		try {
+			MediaType contentType = request.getHeaders().getContentType();
+			if (MediaType.MULTIPART_FORM_DATA.isCompatibleWith(contentType)) {
+				return ((HttpMessageReader<MultiValueMap<String, Part>>) configurer.getReaders().stream()
+						.filter(reader -> reader.canRead(MULTIPART_DATA_TYPE, MediaType.MULTIPART_FORM_DATA))
+						.findFirst()
+						.orElseThrow(() -> new IllegalStateException("No multipart HttpMessageReader.")))
+						.readMono(MULTIPART_DATA_TYPE, request, Collections.emptyMap())
+						.switchIfEmpty(EMPTY_MULTIPART_DATA)
+						.cache();
+			}
+		}
+		catch (InvalidMediaTypeException ex) {
+			// Ignore
+		}
+		return EMPTY_MULTIPART_DATA;
 	}
 
 
@@ -170,8 +195,8 @@ public class DefaultServerWebExchange implements ServerWebExchange {
 	}
 
 	@Override
-	public Mono<MultiValueMap<String, String>> getRequestParams() {
-		return this.requestParamsMono;
+	public Mono<MultiValueMap<String, Part>> getMultipartData() {
+		return this.multipartDataMono;
 	}
 
 	@Override

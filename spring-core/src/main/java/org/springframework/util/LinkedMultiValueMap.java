@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -75,12 +75,14 @@ public class LinkedMultiValueMap<K, V> implements MultiValueMap<K, V>, Serializa
 
 	@Override
 	public void add(K key, V value) {
-		List<V> values = this.targetMap.get(key);
-		if (values == null) {
-			values = new LinkedList<>();
-			this.targetMap.put(key, values);
-		}
+		List<V> values = this.targetMap.computeIfAbsent(key, k -> new LinkedList<>());
 		values.add(value);
+	}
+
+	@Override
+	public void addAll(K key, List<V> values) {
+		List<V> currentValues = this.targetMap.computeIfAbsent(key, k -> new LinkedList<>());
+		currentValues.addAll(values);
 	}
 
 	@Override
@@ -98,17 +100,14 @@ public class LinkedMultiValueMap<K, V> implements MultiValueMap<K, V>, Serializa
 
 	@Override
 	public void setAll(Map<K, V> values) {
-		for (Entry<K, V> entry : values.entrySet()) {
-			set(entry.getKey(), entry.getValue());
-		}
+		values.forEach(this::set);
 	}
 
 	@Override
 	public Map<K, V> toSingleValueMap() {
 		LinkedHashMap<K, V> singleValueMap = new LinkedHashMap<>(this.targetMap.size());
-		for (Entry<K, List<V>> entry : this.targetMap.entrySet()) {
-			singleValueMap.put(entry.getKey(), entry.getValue().get(0));
-		}
+		this.targetMap.forEach((key, value) -> singleValueMap.put(key, value.get(0)));
+		
 		return singleValueMap;
 	}
 
@@ -184,9 +183,9 @@ public class LinkedMultiValueMap<K, V> implements MultiValueMap<K, V>, Serializa
 	 */
 	public LinkedMultiValueMap<K, V> deepCopy() {
 		LinkedMultiValueMap<K, V> copy = new LinkedMultiValueMap<>(this.targetMap.size());
-		for (Map.Entry<K, List<V>> entry : this.targetMap.entrySet()) {
-			copy.put(entry.getKey(), new LinkedList<>(entry.getValue()));
-		}
+		this.targetMap.entrySet().forEach(entry -> 
+			copy.put(entry.getKey(), new LinkedList<>(entry.getValue())));
+		
 		return copy;
 	}
 

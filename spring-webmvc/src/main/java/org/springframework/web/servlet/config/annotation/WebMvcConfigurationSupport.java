@@ -49,6 +49,7 @@ import org.springframework.http.converter.feed.AtomFeedHttpMessageConverter;
 import org.springframework.http.converter.feed.RssChannelHttpMessageConverter;
 import org.springframework.http.converter.json.GsonHttpMessageConverter;
 import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
+import org.springframework.http.converter.json.JsonbHttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.http.converter.smile.MappingJackson2SmileHttpMessageConverter;
 import org.springframework.http.converter.support.AllEncompassingFormHttpMessageConverter;
@@ -167,7 +168,6 @@ import org.springframework.web.util.UrlPathHelper;
  * @since 3.1
  * @see EnableWebMvc
  * @see WebMvcConfigurer
- * @see WebMvcConfigurerAdapter
  */
 public class WebMvcConfigurationSupport implements ApplicationContextAware, ServletContextAware {
 
@@ -192,6 +192,9 @@ public class WebMvcConfigurationSupport implements ApplicationContextAware, Serv
 
 	private static final boolean gsonPresent =
 			ClassUtils.isPresent("com.google.gson.Gson", WebMvcConfigurationSupport.class.getClassLoader());
+
+	private static final boolean jsonbPresent =
+			ClassUtils.isPresent("javax.json.bind.Jsonb", WebMvcConfigurationSupport.class.getClassLoader());
 
 
 	private ApplicationContext applicationContext;
@@ -385,12 +388,12 @@ public class WebMvcConfigurationSupport implements ApplicationContextAware, Serv
 		Map<String, MediaType> map = new HashMap<>(4);
 		if (romePresent) {
 			map.put("atom", MediaType.APPLICATION_ATOM_XML);
-			map.put("rss", MediaType.valueOf("application/rss+xml"));
+			map.put("rss", MediaType.APPLICATION_RSS_XML);
 		}
 		if (jaxb2Present || jackson2XmlPresent) {
 			map.put("xml", MediaType.APPLICATION_XML);
 		}
-		if (jackson2Present || gsonPresent) {
+		if (jackson2Present || gsonPresent || jsonbPresent) {
 			map.put("json", MediaType.APPLICATION_JSON);
 		}
 		if (jackson2SmilePresent) {
@@ -628,11 +631,8 @@ public class WebMvcConfigurationSupport implements ApplicationContextAware, Serv
 					String className = "org.springframework.validation.beanvalidation.OptionalValidatorFactoryBean";
 					clazz = ClassUtils.forName(className, WebMvcConfigurationSupport.class.getClassLoader());
 				}
-				catch (ClassNotFoundException ex) {
+				catch (ClassNotFoundException | LinkageError ex) {
 					throw new BeanInitializationException("Could not find default validator class", ex);
-				}
-				catch (LinkageError ex) {
-					throw new BeanInitializationException("Could not load default validator class", ex);
 				}
 				validator = (Validator) BeanUtils.instantiateClass(clazz);
 			}
@@ -787,6 +787,9 @@ public class WebMvcConfigurationSupport implements ApplicationContextAware, Serv
 		}
 		else if (gsonPresent) {
 			messageConverters.add(new GsonHttpMessageConverter());
+		}
+		else if (jsonbPresent) {
+			messageConverters.add(new JsonbHttpMessageConverter());
 		}
 
 		if (jackson2SmilePresent) {
@@ -960,6 +963,8 @@ public class WebMvcConfigurationSupport implements ApplicationContextAware, Serv
 	}
 
 	/**
+	 * Return the registered {@link CorsConfiguration} objects,
+	 * keyed by path pattern.
 	 * @since 4.2
 	 */
 	protected final Map<String, CorsConfiguration> getCorsConfigurations() {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2016 the original author or authors.
+ * Copyright 2002-2017 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -762,7 +762,7 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 	@Override
 	public void registerCustomEditor(Class<?> requiredType, Class<? extends PropertyEditor> propertyEditorClass) {
 		Assert.notNull(requiredType, "Required type must not be null");
-		Assert.isAssignable(PropertyEditor.class, propertyEditorClass);
+		Assert.notNull(propertyEditorClass, "PropertyEditor class must not be null");
 		this.customEditors.put(requiredType, propertyEditorClass);
 	}
 
@@ -1177,11 +1177,11 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 			}
 		}
 		if (!this.customEditors.isEmpty()) {
-			for (Map.Entry<Class<?>, Class<? extends PropertyEditor>> entry : this.customEditors.entrySet()) {
+			this.customEditors.entrySet().forEach(entry -> {
 				Class<?> requiredType = entry.getKey();
 				Class<? extends PropertyEditor> editorClass = entry.getValue();
 				registry.registerCustomEditor(requiredType, BeanUtils.instantiateClass(editorClass));
-			}
+			});
 		}
 	}
 
@@ -1291,8 +1291,8 @@ public abstract class AbstractBeanFactory extends FactoryBeanRegistrySupport imp
 					mbd.setScope(containingBd.getScope());
 				}
 
-				// Only cache the merged bean definition if we're already about to create an
-				// instance of the bean, or at least have already created an instance before.
+				// Cache the merged bean definition for the time being
+				// (it might still get re-merged later on in order to pick up metadata changes)
 				if (containingBd == null && isCacheBeanMetadata()) {
 					this.mergedBeanDefinitions.put(beanName, mbd);
 				}

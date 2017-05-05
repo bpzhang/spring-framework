@@ -24,6 +24,7 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 
+import org.springframework.core.io.Resource;
 import org.springframework.core.io.support.ResourceRegion;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
@@ -31,7 +32,6 @@ import org.springframework.http.HttpOutputMessage;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
 import org.springframework.util.Assert;
-import org.springframework.util.ClassUtils;
 import org.springframework.util.MimeTypeUtils;
 import org.springframework.util.StreamUtils;
 
@@ -44,17 +44,29 @@ import org.springframework.util.StreamUtils;
  */
 public class ResourceRegionHttpMessageConverter extends AbstractGenericHttpMessageConverter<Object> {
 
-	private static final boolean jafPresent = ClassUtils.isPresent(
-			"javax.activation.FileTypeMap", ResourceHttpMessageConverter.class.getClassLoader());
-
 	public ResourceRegionHttpMessageConverter() {
 		super(MediaType.ALL);
 	}
 
 
 	@Override
-	protected boolean supports(Class<?> clazz) {
-		// should not be called as we override canRead/canWrite
+	@SuppressWarnings("unchecked")
+	protected MediaType getDefaultContentType(Object object) {
+		Resource resource = null;
+		if (object instanceof ResourceRegion) {
+			resource = ((ResourceRegion) object).getResource();
+		}
+		else {
+			Collection<ResourceRegion> regions = (Collection<ResourceRegion>) object;
+			if (regions.size() > 0) {
+				resource = regions.iterator().next().getResource();
+			}
+		}
+		return MediaTypeFactory.getMediaType(resource).orElse(MediaType.APPLICATION_OCTET_STREAM);
+	}
+
+	@Override
+	public boolean canRead(Class<?> clazz, MediaType mediaType) {
 		return false;
 	}
 
@@ -67,31 +79,14 @@ public class ResourceRegionHttpMessageConverter extends AbstractGenericHttpMessa
 	public Object read(Type type, Class<?> contextClass, HttpInputMessage inputMessage)
 			throws IOException, HttpMessageNotReadableException {
 
-		return null;
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
 	protected ResourceRegion readInternal(Class<?> clazz, HttpInputMessage inputMessage)
 			throws IOException, HttpMessageNotReadableException {
 
-		return null;
-	}
-
-	@Override
-	@SuppressWarnings("unchecked")
-	protected MediaType getDefaultContentType(Object object) {
-		if (jafPresent) {
-			if(object instanceof ResourceRegion) {
-				return MediaTypeFactory.getMediaType(((ResourceRegion) object).getResource());
-			}
-			else {
-				Collection<ResourceRegion> regions = (Collection<ResourceRegion>) object;
-				if(regions.size() > 0) {
-					return MediaTypeFactory.getMediaType(regions.iterator().next().getResource());
-				}
-			}
-		}
-		return MediaType.APPLICATION_OCTET_STREAM;
+		throw new UnsupportedOperationException();
 	}
 
 	@Override
@@ -141,6 +136,7 @@ public class ResourceRegionHttpMessageConverter extends AbstractGenericHttpMessa
 			}
 		}
 	}
+
 
 	protected void writeResourceRegion(ResourceRegion region, HttpOutputMessage outputMessage) throws IOException {
 		Assert.notNull(region, "ResourceRegion must not be null");
@@ -198,8 +194,6 @@ public class ResourceRegionHttpMessageConverter extends AbstractGenericHttpMessa
 		println(out);
 		print(out, "--" + boundaryString + "--");
 	}
-
-
 
 	private static void println(OutputStream os) throws IOException {
 		os.write('\r');

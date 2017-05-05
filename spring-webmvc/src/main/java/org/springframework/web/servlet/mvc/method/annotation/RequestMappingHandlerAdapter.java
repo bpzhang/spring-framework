@@ -36,6 +36,7 @@ import org.springframework.beans.factory.config.ConfigurableBeanFactory;
 import org.springframework.core.DefaultParameterNameDiscoverer;
 import org.springframework.core.MethodIntrospector;
 import org.springframework.core.ParameterNameDiscoverer;
+import org.springframework.core.ReactiveAdapterRegistry;
 import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 import org.springframework.core.annotation.AnnotationUtils;
 import org.springframework.core.task.AsyncTaskExecutor;
@@ -142,6 +143,8 @@ public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
 	private CallableProcessingInterceptor[] callableInterceptors = new CallableProcessingInterceptor[0];
 
 	private DeferredResultProcessingInterceptor[] deferredResultInterceptors = new DeferredResultProcessingInterceptor[0];
+
+	private ReactiveAdapterRegistry reactiveRegistry = new ReactiveAdapterRegistry();
 
 	private boolean ignoreDefaultModelOnRedirect = false;
 
@@ -395,7 +398,7 @@ public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
 	 * @param interceptors the interceptors to register
 	 */
 	public void setCallableInterceptors(List<CallableProcessingInterceptor> interceptors) {
-		Assert.notNull(interceptors);
+		Assert.notNull(interceptors, "CallableProcessingInterceptor List must not be null");
 		this.callableInterceptors = interceptors.toArray(new CallableProcessingInterceptor[interceptors.size()]);
 	}
 
@@ -404,8 +407,24 @@ public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
 	 * @param interceptors the interceptors to register
 	 */
 	public void setDeferredResultInterceptors(List<DeferredResultProcessingInterceptor> interceptors) {
-		Assert.notNull(interceptors);
+		Assert.notNull(interceptors, "DeferredResultProcessingInterceptor List must not be null");
 		this.deferredResultInterceptors = interceptors.toArray(new DeferredResultProcessingInterceptor[interceptors.size()]);
+	}
+
+	/**
+	 * Configure the registry for reactive library types to be supported as
+	 * return values from controller methods.
+	 */
+	public void setReactiveRegistry(ReactiveAdapterRegistry reactiveRegistry) {
+		Assert.notNull(reactiveRegistry, "ReactiveAdapterRegistry is required");
+		this.reactiveRegistry = this.reactiveRegistry;
+	}
+
+	/**
+	 * Return the configured reactive type registry of adapters.
+	 */
+	public ReactiveAdapterRegistry getReactiveAdapterRegistry() {
+		return this.reactiveRegistry;
 	}
 
 	/**
@@ -663,7 +682,8 @@ public class RequestMappingHandlerAdapter extends AbstractHandlerMethodAdapter
 		handlers.add(new ModelAndViewMethodReturnValueHandler());
 		handlers.add(new ModelMethodProcessor());
 		handlers.add(new ViewMethodReturnValueHandler());
-		handlers.add(new ResponseBodyEmitterReturnValueHandler(getMessageConverters()));
+		handlers.add(new ResponseBodyEmitterReturnValueHandler(getMessageConverters(),
+				this.reactiveRegistry, this.taskExecutor, this.contentNegotiationManager));
 		handlers.add(new StreamingResponseBodyReturnValueHandler());
 		handlers.add(new HttpEntityMethodProcessor(getMessageConverters(),
 				this.contentNegotiationManager, this.requestResponseBodyAdvice));
